@@ -125,7 +125,7 @@
       <section aria-labelledby="chart-heading">
         <div class="section-heading"><h2 id="chart-heading">Last 24 measured hours</h2><p id="chart-period">Awaiting readings</p></div>
         <div class="paper chart-wrap" id="chart-region">
-          <p class="chart-empty" id="chart-empty">No measured readings have been recorded in the last 24 hours.</p>
+          <p class="chart-empty" id="chart-empty">No readings have been collected in the last 24 hours.</p>
           <svg id="occupancy-chart" viewBox="0 0 920 310" role="img" aria-labelledby="chart-title chart-desc" hidden>
             <title id="chart-title">Occupancy readings over the last 24 hours</title>
             <desc id="chart-desc">No recorded readings available.</desc>
@@ -142,7 +142,7 @@
               <table class="heatmap" id="heatmap"><caption class="sr-only">Historical median occupancy by weekday and New York hour</caption></table>
             </div>
             <div class="heatmap-key" aria-hidden="true"><span>Lower</span><span class="key-gradient"></span><span>Higher</span></div>
-            <p class="empty-note" id="heatmap-empty">No historical readings have been collected yet.</p>
+            <p class="empty-note" id="heatmap-empty">No readings have been collected yet.</p>
           </div>
         </section>
 
@@ -150,7 +150,7 @@
           <div class="section-heading"><h2 id="quiet-heading">Quietest windows</h2><p>Historical, not live</p></div>
           <div class="paper">
             <ol class="quiet-list" id="quiet-list"></ol>
-            <p class="empty-note" id="quiet-empty">Need at least three recorded weekday/hour windows before they can be ranked.</p>
+            <p class="empty-note" id="quiet-empty">No readings have been collected yet. Three weekday/hour windows are needed before they can be ranked.</p>
           </div>
         </section>
       </div>
@@ -199,17 +199,19 @@
         }
 
         function parseCSV(text) {
-          if (typeof text !== "string") return [];
+          if (typeof text !== "string") return { ok: false, readings: [] };
           const lines = text.trim().split(/\r?\n/);
-          if (!lines.length || lines[0].trim() !== "timestamp_utc,occupancy,status") return [];
-          return lines.slice(1).map((line) => {
+          if (!lines.length || lines[0].trim() !== "timestamp_utc,occupancy,status") return { ok: false, readings: [] };
+          const parsedRows = lines.slice(1).map((line) => {
             const [timestamp_utc, occupancy, status] = line.split(",");
             const date = safeDate(timestamp_utc);
             const count = Number(occupancy);
             return date && Number.isInteger(count) && count >= 0 && typeof status === "string"
               ? { timestamp_utc, occupancy: count, status: status.trim(), date }
               : null;
-          }).filter(Boolean).sort((a, b) => a.date - b.date);
+          });
+          if (parsedRows.some((reading) => reading === null)) return { ok: false, readings: [] };
+          return { ok: true, readings: parsedRows.sort((a, b) => a.date - b.date) };
         }
 
         function parseInsights(text) {
@@ -257,6 +259,20 @@
           $("updated-at").textContent = generated ? `Insights generated: ${fmt.format(generated)}` : `Latest measurement: ${fmt.format(latest.date)}`;
         }
 
+        function renderUnavailable() {
+          $("latest-count").textContent = "—";
+          $("latest-unit").textContent = "data unavailable";
+          $("latest-time").textContent = "The public readings file could not be loaded or validated. Refresh this page to retry.";
+          $("signal-state").textContent = "Data\nunavailable";
+          $("signal-copy").textContent = "No live count is shown until a valid public readings file is available. Refresh to retry.";
+          $("chart-period").textContent = "Data unavailable";
+          $("chart-empty").textContent = "Data unavailable. The public readings file could not be loaded or validated; refresh this page to retry.";
+          $("chart-caption").textContent = "No crowd chart is displayed because the public readings file is unavailable.";
+          $("heatmap-empty").textContent = "Data unavailable. Refresh this page to retry loading the public readings file.";
+          $("quiet-empty").textContent = "Data unavailable. Refresh this page to retry loading the public readings file.";
+          $("updated-at").textContent = "Data status: unavailable";
+        }
+
         function svgEl(name, attrs = {}) {
           const node = document.createElementNS("http://www.w3.org/2000/svg", name);
           Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, String(value)));
@@ -283,7 +299,7 @@
           const upper = max + pad;
           const x = (time) => 58 + ((time - start) / Math.max(end - start, 1)) * 834;
           const y = (value) => 252 - ((value - lower) / Math.max(upper - lower, 1)) * 202;
-          const desc = `${data.length} recorded readings from ${fmt.format(data[0].date)} to ${fmt.format(data.at(-1).date)}. Values range from ${min} to ${max}.`;
+          const desc = `${data.length} recorded readings from ${fmt.format(data[0].date)} to ${fmt.format(data.at(-1).date)}. Values range from ${min} to ${max}. Gaps longer than twenty minutes are not connected.`;
           chart.querySelector("desc").textContent = desc;
           [lower, Math.round((lower + upper) / 2), upper].forEach((value) => {
             const lineY = y(value);
@@ -293,8 +309,17 @@
             chart.append(label);
           });
           chart.append(svgEl("line", { x1: 58, x2: 892, y1: 252, y2: 252, stroke: "#11100e", "stroke-width": 1.5 }));
-          const points = data.map((point) => `${x(point.date.getTime()).toFixed(1)},${y(point.occupancy).toFixed(1)}`).join(" ");
-          chart.append(svgEl("polyline", { points, fill: "none", stroke: "#ff5a1f", "stroke-width": 4, "stroke-linecap": "round", "stroke-linejoin": "round" }));
+          const cadenceTolerance = 20 * 60 * 1000;
+          const segments = data.reduce((all, point) => {
+            const current = all.at(-1);
+            if (current.length && point.date.getTime() - current.at(-1).date.getTime() > cadenceTolerance) all.push([]);
+            all.at(-1).push(point);
+            return all;
+          }, [[]]);
+          segments.filter((segment) => segment.length > 1).forEach((segment) => {
+            const points = segment.map((point) => `${x(point.date.getTime()).toFixed(1)},${y(point.occupancy).toFixed(1)}`).join(" ");
+            chart.append(svgEl("polyline", { points, fill: "none", stroke: "#ff5a1f", "stroke-width": 4, "stroke-linecap": "round", "stroke-linejoin": "round" }));
+          });
           data.forEach((point) => chart.append(svgEl("circle", { cx: x(point.date.getTime()), cy: y(point.occupancy), r: 3.5, fill: "#11100e", stroke: "#ff5a1f", "stroke-width": 2 })));
           [data[0].date, data.at(-1).date].forEach((date, index) => {
             const label = svgEl("text", { x: index ? 892 : 58, y: 282, "text-anchor": index ? "end" : "start", fill: "#6c665d", "font-family": "Avenir Next, sans-serif", "font-size": 12 });
@@ -342,10 +367,8 @@
         }
 
         function hourLabel(hour) {
-          const start = new Date(Date.UTC(2026, 0, 1, hour));
-          const end = new Date(Date.UTC(2026, 0, 1, (hour + 1) % 24));
-          const options = { hour: "numeric" };
-          return `${new Intl.DateTimeFormat("en-US", options).format(start)}–${new Intl.DateTimeFormat("en-US", options).format(end)}`;
+          const clock = (value) => `${String(value % 24).padStart(2, "0")}:00`;
+          return `${clock(hour)}–${clock(hour + 1)} ET`;
         }
 
         function renderQuietWindows(history) {
@@ -376,7 +399,13 @@
 
         async function init() {
           const [csvResult, insightsResult] = await Promise.allSettled([fetchText("./data/readings.csv"), fetchText("./data/insights.json")]);
-          const readings = csvResult.status === "fulfilled" ? parseCSV(csvResult.value) : [];
+          const csv = csvResult.status === "fulfilled" ? parseCSV(csvResult.value) : { ok: false, readings: [] };
+          if (!csv.ok) {
+            renderUnavailable();
+            $("announce").textContent = "Crowd data is unavailable. Refresh the page to retry.";
+            return;
+          }
+          const readings = csv.readings;
           const insights = insightsResult.status === "fulfilled" ? parseInsights(insightsResult.value) : {};
           renderLatest(readings, insights);
           renderChart(readings);
