@@ -3,6 +3,94 @@
     "0-08:40": {
       "median": 168,
       "n": 1
+    },
+    "0-09:30": {
+      "median": 189,
+      "n": 1
+    },
+    "0-10:00": {
+      "median": 223,
+      "n": 1
+    },
+    "0-10:30": {
+      "median": 236,
+      "n": 1
+    },
+    "0-11:00": {
+      "median": 250,
+      "n": 1
+    },
+    "0-11:30": {
+      "median": 286,
+      "n": 1
+    },
+    "0-11:50": {
+      "median": 304,
+      "n": 1
+    },
+    "0-12:10": {
+      "median": 323,
+      "n": 1
+    },
+    "0-12:50": {
+      "median": 364,
+      "n": 1
+    },
+    "0-13:10": {
+      "median": 385,
+      "n": 1
+    },
+    "0-13:40": {
+      "median": 415,
+      "n": 1
+    },
+    "0-14:10": {
+      "median": 418,
+      "n": 1
+    },
+    "0-15:00": {
+      "median": 464,
+      "n": 1
+    },
+    "0-15:30": {
+      "median": 475,
+      "n": 1
+    },
+    "0-15:50": {
+      "median": 489,
+      "n": 1
+    },
+    "0-16:20": {
+      "median": 522,
+      "n": 1
+    },
+    "0-16:50": {
+      "median": 548,
+      "n": 1
+    },
+    "0-17:10": {
+      "median": 580,
+      "n": 1
+    },
+    "0-17:40": {
+      "median": 622,
+      "n": 1
+    },
+    "0-18:00": {
+      "median": 662,
+      "n": 1
+    },
+    "0-18:30": {
+      "median": 763,
+      "n": 1
+    },
+    "0-18:50": {
+      "median": 798,
+      "n": 1
+    },
+    "0-19:10": {
+      "median": 846,
+      "n": 1
     }
   },
   "class_annotations": {
@@ -12,14 +100,14 @@
   "correlations": {
     "status": "insufficient_data"
   },
-  "generated_at": "2026-08-17T12:49:11.925550+00:00",
+  "generated_at": "2026-08-17T23:42:43.963629+00:00",
   "latest": {
     "holiday": false,
     "holiday_label": null,
-    "local": "2026-08-17T08:48:47-04:00",
-    "occupancy": 168,
-    "status": "moderate",
-    "timestamp_utc": "2026-08-17T12:48:47Z"
+    "local": "2026-08-17T19:17:24-04:00",
+    "occupancy": 846,
+    "status": "active",
+    "timestamp_utc": "2026-08-17T23:17:24Z"
   },
   "recommendations": [],
   "recommendations_status": "insufficient_data"
