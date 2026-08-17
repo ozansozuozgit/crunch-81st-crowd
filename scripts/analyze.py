@@ -65,6 +65,29 @@ def association(rows: list[dict], field: str, value: bool) -> dict[str, int | fl
     }
 
 
+def weather_association(rows: list[dict]) -> dict[str, int | float | str]:
+    by_local_date: dict[str, list[dict]] = {}
+    for row in rows:
+        local_date = datetime.fromisoformat(row["local"]).date().isoformat()
+        by_local_date.setdefault(local_date, []).append(row)
+
+    independent_dates = []
+    for date_rows in by_local_date.values():
+        conditions = {row["rain"] for row in date_rows}
+        if len(conditions) != 1:
+            continue
+        # The 20-observation threshold is enforced on daily averages, not the
+        # adjacent ten-minute samples. A date with mixed rain/dry blocks is
+        # excluded so it cannot count toward both independent populations.
+        independent_dates.append(
+            {
+                "residual": fmean(row["residual"] for row in date_rows),
+                "rain": conditions.pop(),
+            }
+        )
+    return association(independent_dates, "rain", True)
+
+
 def load_weather(readings: list[dict], fetch_json) -> dict[str, dict[str, int | float | bool]]:
     if not readings:
         return {}
@@ -118,18 +141,27 @@ def main(
         insights["latest"] = readings[-1]
         insights["baselines"] = median_baseline(readings)
     if len(readings) >= 20:
-        weather_by_hour = load_weather(readings, fetch_json or fetch_open_meteo_json)
-        rows = []
-        for reading in readings:
-            weather = weather_by_hour.get(_local_hour_key(reading["local"]))
-            if weather is None:
-                continue
-            baseline = insights["baselines"][slot_key(reading["local"])]["median"]
-            rows.append({"residual": reading["occupancy"] - baseline, **weather})
-        correlation = association(rows, "rain", True)
-        if correlation["status"] == "observed":
-            correlation["label"] = "observed association"
-        insights["correlations"] = correlation
+        try:
+            weather_by_hour = load_weather(readings, fetch_json or fetch_open_meteo_json)
+            rows = []
+            for reading in readings:
+                weather = weather_by_hour.get(_local_hour_key(reading["local"]))
+                if weather is None:
+                    continue
+                baseline = insights["baselines"][slot_key(reading["local"])]["median"]
+                rows.append(
+                    {
+                        "local": reading["local"],
+                        "residual": reading["occupancy"] - baseline,
+                        **weather,
+                    }
+                )
+            correlation = weather_association(rows)
+            if correlation["status"] == "observed":
+                correlation["label"] = "observed association"
+            insights["correlations"] = correlation
+        except (OSError, TypeError, ValueError, KeyError):
+            pass
     _write_json_atomically(insights_path, insights)
     return 0
 

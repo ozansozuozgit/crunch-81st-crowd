@@ -11,7 +11,15 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from scripts import analyze
-from scripts.analyze import association, empty_insights, load_weather, main, median_baseline, slot_key
+from scripts.analyze import (
+    association,
+    empty_insights,
+    load_weather,
+    main,
+    median_baseline,
+    slot_key,
+    weather_association,
+)
 
 
 class SlotAndBaselineTests(unittest.TestCase):
@@ -49,6 +57,15 @@ class AssociationTests(unittest.TestCase):
                 "confidence_high": 10,
             },
         )
+
+    def test_weather_association_requires_twenty_independent_local_dates_per_condition(self):
+        # Forty interval samples are not forty independent observations: these are only
+        # one rainy local date and one dry local date, so weather evidence is insufficient.
+        rows = ([{"local": "2026-08-17T18:00:00-04:00", "residual": 10, "rain": True}] * 20) + (
+            [{"local": "2026-08-18T18:00:00-04:00", "residual": 0, "rain": False}] * 20
+        )
+
+        self.assertEqual(weather_association(rows), {"status": "insufficient_data"})
 
 
 class WeatherTests(unittest.TestCase):
@@ -182,6 +199,27 @@ class MainTests(unittest.TestCase):
 
             insights = json.loads(insights_path.read_text())
             self.assertEqual(len(requested), 1)
+            self.assertEqual(insights["correlations"], {"status": "insufficient_data"})
+
+    def test_main_publishes_baselines_when_weather_loading_fails(self):
+        def fetch_json(_url):
+            raise OSError("weather service unavailable")
+
+        with tempfile.TemporaryDirectory() as directory:
+            readings_path = Path(directory) / "readings.csv"
+            insights_path = Path(directory) / "insights.json"
+            readings_path.write_text(
+                "timestamp_utc,occupancy,status\n"
+                + "2026-08-17T22:07:00Z,34,light\n" * 20
+            )
+
+            exit_code = main(readings_path, insights_path, fetch_json, "2026-08-17T23:00:00Z")
+
+            self.assertEqual(exit_code, 0)
+            insights = json.loads(insights_path.read_text())
+            self.assertEqual(insights["generated_at"], "2026-08-17T23:00:00Z")
+            self.assertEqual(insights["latest"]["occupancy"], 34)
+            self.assertEqual(insights["baselines"], {"0-18:00": {"median": 34.0, "n": 20}})
             self.assertEqual(insights["correlations"], {"status": "insufficient_data"})
 
     def test_main_uses_the_standard_library_weather_fetcher_by_default(self):
