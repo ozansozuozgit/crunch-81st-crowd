@@ -203,11 +203,14 @@
           const lines = text.trim().split(/\r?\n/);
           if (!lines.length || lines[0].trim() !== "timestamp_utc,occupancy,status") return { ok: false, readings: [] };
           const parsedRows = lines.slice(1).map((line) => {
-            const [timestamp_utc, occupancy, status] = line.split(",");
+            const columns = line.split(",");
+            if (columns.length !== 3) return null;
+            const [timestamp_utc, occupancy, status] = columns;
             const date = safeDate(timestamp_utc);
             const count = Number(occupancy);
-            return date && Number.isInteger(count) && count >= 0 && typeof status === "string"
-              ? { timestamp_utc, occupancy: count, status: status.trim(), date }
+            const normalizedStatus = status.trim();
+            return timestamp_utc.trim() && occupancy.trim() && date && Number.isInteger(count) && count >= 0 && normalizedStatus
+              ? { timestamp_utc, occupancy: count, status: normalizedStatus, date }
               : null;
           });
           if (parsedRows.some((reading) => reading === null)) return { ok: false, readings: [] };
