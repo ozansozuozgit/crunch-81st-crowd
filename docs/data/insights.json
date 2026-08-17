@@ -1,5 +1,10 @@
 {
-  "baselines": {},
+  "baselines": {
+    "0-08:40": {
+      "median": 168,
+      "n": 1
+    }
+  },
   "class_annotations": {
     "items": [],
     "status": "empty"
@@ -7,8 +12,15 @@
   "correlations": {
     "status": "insufficient_data"
   },
-  "generated_at": null,
-  "latest": null,
+  "generated_at": "2026-08-17T12:49:11.925550+00:00",
+  "latest": {
+    "holiday": false,
+    "holiday_label": null,
+    "local": "2026-08-17T08:48:47-04:00",
+    "occupancy": 168,
+    "status": "moderate",
+    "timestamp_utc": "2026-08-17T12:48:47Z"
+  },
   "recommendations": [],
   "recommendations_status": "insufficient_data"
 }
