@@ -8,10 +8,6 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: crunch-81st-data-writer
-  cancel-in-progress: false
-
 jobs:
   collect:
     runs-on: ubuntu-latest
@@ -34,7 +30,19 @@ jobs:
             git commit -m "data: record Crunch occupancy"
             for attempt in 1 2 3; do
               git fetch origin "${GITHUB_REF_NAME}"
-              git rebase "origin/${GITHUB_REF_NAME}"
+              if git rebase "origin/${GITHUB_REF_NAME}"; then
+                :
+              else
+                conflicted_files="$(git diff --name-only --diff-filter=U)"
+                if [ "$conflicted_files" = "docs/data/readings.csv" ]; then
+                  python scripts/merge_readings.py docs/data/readings.csv
+                  git add -- docs/data/readings.csv
+                  GIT_EDITOR=true git rebase --continue
+                else
+                  echo "Unexpected rebase conflict: ${conflicted_files:-none}" >&2
+                  exit 1
+                fi
+              fi
               if git push origin "HEAD:${GITHUB_REF_NAME}"; then
                 exit 0
               fi
