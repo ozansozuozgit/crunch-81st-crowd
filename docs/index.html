@@ -150,10 +150,19 @@
           <div class="section-heading"><h2 id="quiet-heading">Quietest windows</h2><p>Historical, not live</p></div>
           <div class="paper">
             <ol class="quiet-list" id="quiet-list"></ol>
-            <p class="empty-note" id="quiet-empty">No readings have been collected yet. Three weekday/hour windows are needed before they can be ranked.</p>
+            <p class="empty-note" id="quiet-empty">Not enough evidence yet. A time window needs four independent local dates before it can be recommended.</p>
           </div>
         </section>
       </div>
+
+      <section class="weather" aria-labelledby="classes-heading">
+        <div class="section-heading"><h2 id="classes-heading">Class-time annotations</h2><p>Schedule context, not causal evidence</p></div>
+        <div class="paper">
+          <ul class="quiet-list" id="class-list" aria-describedby="class-note"></ul>
+          <p class="empty-note" id="class-empty">No class-time annotations are published yet.</p>
+          <p class="weather-copy" id="class-note"><strong>Context only</strong> — Published class times can coincide with traffic, but they do not demonstrate that a class caused a crowd change.</p>
+        </div>
+      </section>
 
       <section class="weather" aria-labelledby="weather-heading">
         <div class="section-heading"><h2 id="weather-heading">Weather check</h2><p>Evidence threshold applied</p></div>
@@ -369,23 +378,81 @@
           table.replaceChildren(thead, tbody);
         }
 
-        function hourLabel(hour) {
-          const clock = (value) => `${String(value % 24).padStart(2, "0")}:00`;
-          return `${clock(hour)}–${clock(hour + 1)} ET`;
+        function parseRecommendationSlot(slot) {
+          const match = typeof slot === "string" && slot.match(/^([0-6])-(\d{2}):([0-5]\d)$/);
+          if (!match) return null;
+          const weekdayIndex = Number(match[1]);
+          const hour = Number(match[2]);
+          const minute = Number(match[3]);
+          return hour < 24 ? { weekdayIndex, hour, minute } : null;
         }
 
-        function renderQuietWindows(history) {
-          if (history.length < 3) return;
+        function recommendationWindowLabel(slot) {
+          const parsed = parseRecommendationSlot(slot);
+          if (!parsed) return null;
+          const startMinutes = parsed.hour * 60 + parsed.minute;
+          const clock = (minutes) => `${String(Math.floor((minutes % 1440) / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+          return `${days[parsed.weekdayIndex]} · ${clock(startMinutes)}–${clock(startMinutes + 60)} ET`;
+        }
+
+        function validRecommendations(insights) {
+          if (!insights || insights.recommendations_status !== "ready" || !Array.isArray(insights.recommendations)) return [];
+          const items = insights.recommendations.map((item) => {
+            if (!item || typeof item !== "object" || !recommendationWindowLabel(item.slot)) return null;
+            const baseline = Number(item.baseline_occupancy);
+            const dates = Number(item.independent_dates);
+            return Number.isFinite(baseline) && baseline >= 0 && Number.isInteger(dates) && dates >= 4
+              ? { slot: item.slot, baseline, dates }
+              : null;
+          });
+          return items.some((item) => item === null) ? [] : items;
+        }
+
+        function renderQuietWindows(insights) {
+          const recommendations = validRecommendations(insights);
+          if (!recommendations.length) return;
           $("quiet-empty").hidden = true;
           const list = $("quiet-list");
-          [...history].sort((a, b) => a.median - b.median || b.n - a.n).slice(0, 3).forEach((entry, index) => {
+          recommendations.forEach((recommendation, index) => {
             const item = document.createElement("li");
             const rank = document.createElement("span"); rank.className = "rank"; rank.textContent = `0${index + 1}`;
-            const window = document.createElement("span"); window.className = "window"; window.textContent = `${days[entry.weekdayIndex]} · ${hourLabel(entry.hour)}`;
-            const details = document.createElement("small"); details.textContent = `${entry.n} recorded sample${entry.n === 1 ? "" : "s"}`; window.append(details);
-            const number = document.createElement("span"); number.className = "median"; number.textContent = String(entry.median);
-            const numberLabel = document.createElement("small"); numberLabel.textContent = "median"; number.append(numberLabel);
+            const window = document.createElement("span"); window.className = "window"; window.textContent = recommendationWindowLabel(recommendation.slot);
+            const details = document.createElement("small"); details.textContent = `${recommendation.dates} independent local dates`; window.append(details);
+            const number = document.createElement("span"); number.className = "median"; number.textContent = Number.isInteger(recommendation.baseline) ? String(recommendation.baseline) : recommendation.baseline.toFixed(1);
+            const numberLabel = document.createElement("small"); numberLabel.textContent = "typical"; number.append(numberLabel);
             item.append(rank, window, number); list.append(item);
+          });
+        }
+
+        function validClassAnnotations(insights) {
+          const annotations = insights && insights.class_annotations;
+          if (!annotations || typeof annotations !== "object" || !["available", "partial"].includes(annotations.status) || !Array.isArray(annotations.items)) return [];
+          const items = annotations.items.map((item) => {
+            const weekday = Number(item && item.weekday);
+            const start = item && item.start_local;
+            const end = item && item.end_local;
+            const className = item && item.class_name;
+            const validTime = (time) => typeof time === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
+            return Number.isInteger(weekday) && weekday >= 0 && weekday <= 6 && validTime(start) && validTime(end) && start < end && typeof className === "string" && className.trim()
+              ? { weekday, start, end, className: className.trim() }
+              : null;
+          });
+          return items.some((item) => item === null) ? [] : items;
+        }
+
+        function renderClassAnnotations(insights) {
+          const annotations = validClassAnnotations(insights);
+          if (!annotations.length) return;
+          $("class-empty").hidden = true;
+          const list = $("class-list");
+          annotations.forEach((annotation, index) => {
+            const item = document.createElement("li");
+            const rank = document.createElement("span"); rank.className = "rank"; rank.textContent = String(index + 1).padStart(2, "0");
+            const window = document.createElement("span"); window.className = "window"; window.textContent = annotation.className;
+            const details = document.createElement("small"); details.textContent = `${days[annotation.weekday]} · ${annotation.start}–${annotation.end} ET`; window.append(details);
+            const context = document.createElement("span"); context.className = "median"; context.textContent = "Schedule";
+            const contextLabel = document.createElement("small"); contextLabel.textContent = "annotation"; context.append(contextLabel);
+            item.append(rank, window, context); list.append(item);
           });
         }
 
@@ -414,7 +481,8 @@
           renderChart(readings);
           const history = hourlyHistory(readings);
           renderHeatmap(history);
-          renderQuietWindows(history);
+          renderQuietWindows(insights);
+          renderClassAnnotations(insights);
           renderWeather(insights);
           $("announce").textContent = readings.length ? `Loaded ${readings.length} recorded crowd readings.` : "No valid crowd readings are available yet.";
         }
