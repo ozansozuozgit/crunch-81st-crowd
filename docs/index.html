@@ -282,6 +282,10 @@
           $("chart-caption").textContent = "No crowd chart is displayed because the public readings file is unavailable.";
           $("heatmap-empty").textContent = "Data unavailable. Refresh this page to retry loading the public readings file.";
           $("quiet-empty").textContent = "Data unavailable. Refresh this page to retry loading the public readings file.";
+          $("class-list").replaceChildren();
+          $("class-empty").hidden = false;
+          $("class-empty").textContent = "Data unavailable. Refresh this page to retry loading the public readings file before relying on class-time annotations.";
+          $("class-note").replaceChildren("Class-time annotations are not displayed while the public readings file is unavailable.");
           $("updated-at").textContent = "Data status: unavailable";
         }
 
@@ -399,9 +403,9 @@
           if (!insights || insights.recommendations_status !== "ready" || !Array.isArray(insights.recommendations)) return [];
           const items = insights.recommendations.map((item) => {
             if (!item || typeof item !== "object" || !recommendationWindowLabel(item.slot)) return null;
-            const baseline = Number(item.baseline_occupancy);
-            const dates = Number(item.independent_dates);
-            return Number.isFinite(baseline) && baseline >= 0 && Number.isInteger(dates) && dates >= 4
+            const baseline = item.baseline_occupancy;
+            const dates = item.independent_dates;
+            return typeof baseline === "number" && Number.isFinite(baseline) && baseline >= 0 && typeof dates === "number" && Number.isFinite(dates) && Number.isInteger(dates) && dates >= 4
               ? { slot: item.slot, baseline, dates }
               : null;
           });
@@ -428,12 +432,12 @@
           const annotations = insights && insights.class_annotations;
           if (!annotations || typeof annotations !== "object" || !["available", "partial"].includes(annotations.status) || !Array.isArray(annotations.items)) return [];
           const items = annotations.items.map((item) => {
-            const weekday = Number(item && item.weekday);
+            const weekday = item && item.weekday;
             const start = item && item.start_local;
             const end = item && item.end_local;
             const className = item && item.class_name;
             const validTime = (time) => typeof time === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
-            return Number.isInteger(weekday) && weekday >= 0 && weekday <= 6 && validTime(start) && validTime(end) && start < end && typeof className === "string" && className.trim()
+            return typeof weekday === "number" && Number.isFinite(weekday) && Number.isInteger(weekday) && weekday >= 0 && weekday <= 6 && validTime(start) && validTime(end) && start < end && typeof className === "string" && className.trim()
               ? { weekday, start, end, className: className.trim() }
               : null;
           });

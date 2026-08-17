@@ -132,7 +132,7 @@ class RecommendationTests(unittest.TestCase):
         self.assertEqual(
             quiet_window_recommendations(readings),
             {
-                "status": "available",
+                "status": "ready",
                 "items": [
                     {
                         "slot": "0-18:00",

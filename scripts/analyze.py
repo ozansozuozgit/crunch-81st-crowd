@@ -172,7 +172,7 @@ def quiet_window_recommendations(readings: list[dict]) -> dict[str, list[dict] |
     if not candidates:
         return {"status": "insufficient_data", "items": []}
     return {
-        "status": "available",
+        "status": "ready",
         "items": sorted(candidates, key=lambda candidate: (candidate["baseline_occupancy"], candidate["slot"]))[:5],
     }
 
