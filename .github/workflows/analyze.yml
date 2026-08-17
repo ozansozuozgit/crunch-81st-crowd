@@ -1,0 +1,31 @@
+name: Analyze crowd insights
+
+on:
+  schedule:
+    - cron: "23 23 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test
+        run: python -m unittest discover -v
+      - name: Analyze public readings
+        run: python scripts/analyze.py
+      - name: Commit changed insights
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- docs/data/insights.json
+          git diff --cached --quiet || {
+            git commit -m "data: refresh crowd insights"
+            git push
+          }
