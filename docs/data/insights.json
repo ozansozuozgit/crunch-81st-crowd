@@ -1,9 +1,14 @@
 {
   "baselines": {},
+  "class_annotations": {
+    "items": [],
+    "status": "empty"
+  },
   "correlations": {
     "status": "insufficient_data"
   },
   "generated_at": null,
   "latest": null,
-  "recommendations": []
+  "recommendations": [],
+  "recommendations_status": "insufficient_data"
 }

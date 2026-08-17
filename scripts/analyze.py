@@ -2,7 +2,7 @@ import csv
 import json
 import os
 import tempfile
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from math import sqrt
 from pathlib import Path
 from statistics import fmean, median, variance
@@ -22,12 +22,75 @@ WEATHER_FIELDS = (
 NEW_YORK = ZoneInfo("America/New_York")
 DEFAULT_READINGS_PATH = Path(__file__).resolve().parents[1] / "docs" / "data" / "readings.csv"
 DEFAULT_INSIGHTS_PATH = Path(__file__).resolve().parents[1] / "docs" / "data" / "insights.json"
+DEFAULT_CLASSES_PATH = Path(__file__).resolve().parents[1] / "docs" / "data" / "classes.csv"
+CLASS_FIELDS = ("weekday", "start_local", "end_local", "class_name")
 
 
 def slot_key(local_iso: str) -> str:
     local = datetime.fromisoformat(local_iso)
     minute = local.minute - (local.minute % 10)
     return f"{local.weekday()}-{local.hour:02d}:{minute:02d}"
+
+
+def holiday_context(local_date: str) -> dict[str, bool | str | None]:
+    target = date.fromisoformat(local_date)
+    for year in range(target.year - 1, target.year + 2):
+        for holiday_date, label in _fixed_federal_holidays(year).items():
+            if target == holiday_date:
+                return {"holiday": True, "holiday_label": label}
+            observed = _observed_date(holiday_date)
+            if target == observed:
+                return {"holiday": True, "holiday_label": f"{label} (observed)"}
+
+    for holiday_date, label in _movable_federal_holidays(target.year).items():
+        if target == holiday_date:
+            return {"holiday": True, "holiday_label": label}
+    return {"holiday": False, "holiday_label": None}
+
+
+def _fixed_federal_holidays(year: int) -> dict[date, str]:
+    holidays = {
+        date(year, 1, 1): "New Year's Day",
+        date(year, 7, 4): "Independence Day",
+        date(year, 11, 11): "Veterans Day",
+        date(year, 12, 25): "Christmas Day",
+    }
+    if year >= 2021:
+        holidays[date(year, 6, 19)] = "Juneteenth National Independence Day"
+    return holidays
+
+
+def _movable_federal_holidays(year: int) -> dict[date, str]:
+    return {
+        _nth_weekday(year, 1, 0, 3): "Martin Luther King Jr. Day",
+        _nth_weekday(year, 2, 0, 3): "Washington's Birthday",
+        _last_weekday(year, 5, 0): "Memorial Day",
+        _nth_weekday(year, 9, 0, 1): "Labor Day",
+        _nth_weekday(year, 10, 0, 2): "Columbus Day",
+        _nth_weekday(year, 11, 3, 4): "Thanksgiving Day",
+    }
+
+
+def _nth_weekday(year: int, month: int, weekday: int, occurrence: int) -> date:
+    first = date(year, month, 1)
+    return first + timedelta(days=(weekday - first.weekday()) % 7 + (occurrence - 1) * 7)
+
+
+def _last_weekday(year: int, month: int, weekday: int) -> date:
+    if month == 12:
+        next_month = date(year + 1, 1, 1)
+    else:
+        next_month = date(year, month + 1, 1)
+    days_before = (next_month.weekday() - weekday) % 7
+    return next_month - timedelta(days=days_before or 7)
+
+
+def _observed_date(holiday: date) -> date:
+    if holiday.weekday() == 5:
+        return holiday - timedelta(days=1)
+    if holiday.weekday() == 6:
+        return holiday + timedelta(days=1)
+    return holiday
 
 
 def median_baseline(readings: list[dict]) -> dict[str, dict[str, int | float]]:
@@ -39,6 +102,78 @@ def median_baseline(readings: list[dict]) -> dict[str, dict[str, int | float]]:
     return {
         key: {"median": median(occupancies), "n": len(occupancies)}
         for key, occupancies in sorted(occupancies_by_slot.items())
+    }
+
+
+def load_class_schedule(path: Path) -> dict[str, list[dict] | str]:
+    try:
+        with Path(path).open(newline="") as file:
+            reader = csv.DictReader(file)
+            if tuple(reader.fieldnames or ()) != CLASS_FIELDS:
+                return {"status": "unavailable", "items": []}
+            source_rows = list(reader)
+    except (OSError, UnicodeDecodeError, csv.Error):
+        return {"status": "unavailable", "items": []}
+
+    if not source_rows:
+        return {"status": "empty", "items": []}
+
+    items = []
+    invalid_rows = False
+    for row in source_rows:
+        try:
+            weekday = int(row["weekday"])
+            start = datetime.strptime(row["start_local"], "%H:%M").time()
+            end = datetime.strptime(row["end_local"], "%H:%M").time()
+            class_name = row["class_name"].strip()
+            if not 0 <= weekday <= 6 or start >= end or not class_name:
+                raise ValueError("invalid class row")
+        except (TypeError, ValueError):
+            invalid_rows = True
+            continue
+        items.append(
+            {
+                "weekday": weekday,
+                "start_local": row["start_local"],
+                "end_local": row["end_local"],
+                "class_name": class_name,
+            }
+        )
+
+    if not items:
+        return {"status": "unavailable", "items": []}
+    return {"status": "partial" if invalid_rows else "available", "items": items}
+
+
+def quiet_window_recommendations(readings: list[dict]) -> dict[str, list[dict] | str]:
+    occupancies_by_slot_and_date: dict[str, dict[str, list[int | float]]] = {}
+    for reading in readings:
+        slot = slot_key(reading["local"])
+        local_date = datetime.fromisoformat(reading["local"]).date().isoformat()
+        occupancies_by_slot_and_date.setdefault(slot, {}).setdefault(local_date, []).append(
+            reading["occupancy"]
+        )
+
+    candidates = []
+    for slot, occupancies_by_date in occupancies_by_slot_and_date.items():
+        # A day contributes one averaged observation, regardless of how many
+        # adjacent collection intervals landed in the same ten-minute slot.
+        daily_occupancies = [fmean(values) for values in occupancies_by_date.values()]
+        if len(daily_occupancies) < 4:
+            continue
+        candidates.append(
+            {
+                "slot": slot,
+                "baseline_occupancy": median(daily_occupancies),
+                "independent_dates": len(daily_occupancies),
+            }
+        )
+
+    if not candidates:
+        return {"status": "insufficient_data", "items": []}
+    return {
+        "status": "available",
+        "items": sorted(candidates, key=lambda candidate: (candidate["baseline_occupancy"], candidate["slot"]))[:5],
     }
 
 
@@ -124,7 +259,9 @@ def empty_insights() -> dict:
         "latest": None,
         "baselines": {},
         "recommendations": [],
+        "recommendations_status": "insufficient_data",
         "correlations": {"status": "insufficient_data"},
+        "class_annotations": {"status": "unavailable", "items": []},
     }
 
 
@@ -133,13 +270,18 @@ def main(
     insights_path: Path = DEFAULT_INSIGHTS_PATH,
     fetch_json=None,
     generated_at: str | None = None,
+    classes_path: Path = DEFAULT_CLASSES_PATH,
 ) -> int:
     readings = _read_readings(readings_path)
     insights = empty_insights()
     insights["generated_at"] = generated_at or datetime.now().astimezone().isoformat()
+    insights["class_annotations"] = load_class_schedule(classes_path)
     if readings:
         insights["latest"] = readings[-1]
         insights["baselines"] = median_baseline(readings)
+    recommendations = quiet_window_recommendations(readings)
+    insights["recommendations"] = recommendations["items"]
+    insights["recommendations_status"] = recommendations["status"]
     if len(readings) >= 20:
         try:
             weather_by_hour = load_weather(readings, fetch_json or fetch_open_meteo_json)
@@ -174,12 +316,14 @@ def _read_readings(path: Path) -> list[dict]:
     with Path(path).open(newline="") as file:
         for row in csv.DictReader(file):
             timestamp = datetime.fromisoformat(row["timestamp_utc"].replace("Z", "+00:00"))
+            local = timestamp.astimezone(NEW_YORK).replace(microsecond=0)
             readings.append(
                 {
                     "timestamp_utc": row["timestamp_utc"],
-                    "local": timestamp.astimezone(NEW_YORK).replace(microsecond=0).isoformat(),
+                    "local": local.isoformat(),
                     "occupancy": int(row["occupancy"]),
                     "status": row["status"],
+                    **holiday_context(local.date().isoformat()),
                 }
             )
     return readings

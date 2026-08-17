@@ -14,9 +14,12 @@ from scripts import analyze
 from scripts.analyze import (
     association,
     empty_insights,
+    holiday_context,
+    load_class_schedule,
     load_weather,
     main,
     median_baseline,
+    quiet_window_recommendations,
     slot_key,
     weather_association,
 )
@@ -34,6 +37,110 @@ class SlotAndBaselineTests(unittest.TestCase):
         self.assertEqual(
             median_baseline(readings),
             {"0-18:00": {"median": 100, "n": 3}},
+        )
+
+
+class HolidayTests(unittest.TestCase):
+    def test_marks_fixed_and_observed_federal_holidays(self):
+        self.assertEqual(
+            holiday_context("2026-07-04"),
+            {"holiday": True, "holiday_label": "Independence Day"},
+        )
+        self.assertEqual(
+            holiday_context("2026-07-03"),
+            {"holiday": True, "holiday_label": "Independence Day (observed)"},
+        )
+
+    def test_marks_standard_movable_federal_holidays(self):
+        self.assertEqual(
+            holiday_context("2026-11-26"),
+            {"holiday": True, "holiday_label": "Thanksgiving Day"},
+        )
+        self.assertEqual(
+            holiday_context("2026-05-25"),
+            {"holiday": True, "holiday_label": "Memorial Day"},
+        )
+
+
+class ClassScheduleTests(unittest.TestCase):
+    def test_loads_valid_class_rows_as_non_causal_annotations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "classes.csv"
+            path.write_text(
+                "weekday,start_local,end_local,class_name\n"
+                "0,18:00,19:00,HIIT\n"
+            )
+
+            self.assertEqual(
+                load_class_schedule(path),
+                {
+                    "status": "available",
+                    "items": [
+                        {
+                            "weekday": 0,
+                            "start_local": "18:00",
+                            "end_local": "19:00",
+                            "class_name": "HIIT",
+                        }
+                    ],
+                },
+            )
+
+    def test_rejects_invalid_class_rows_without_raising(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "classes.csv"
+            path.write_text(
+                "weekday,start_local,end_local,class_name\n"
+                "8,19:00,18:00,\n"
+            )
+
+            self.assertEqual(load_class_schedule(path), {"status": "unavailable", "items": []})
+
+
+class RecommendationTests(unittest.TestCase):
+    def test_does_not_treat_adjacent_samples_on_one_date_as_independent(self):
+        readings = [
+            {"local": f"2026-08-17T18:{minute:02d}:00-04:00", "occupancy": 20}
+            for minute in (1, 2, 3, 4)
+        ]
+
+        self.assertEqual(
+            quiet_window_recommendations(readings),
+            {"status": "insufficient_data", "items": []},
+        )
+
+    def test_rejects_three_one_sample_slots_as_insufficient_evidence(self):
+        readings = [
+            {"local": "2026-08-17T18:07:00-04:00", "occupancy": 20},
+            {"local": "2026-08-17T18:17:00-04:00", "occupancy": 22},
+            {"local": "2026-08-17T18:27:00-04:00", "occupancy": 24},
+        ]
+
+        self.assertEqual(
+            quiet_window_recommendations(readings),
+            {"status": "insufficient_data", "items": []},
+        )
+
+    def test_recommends_a_low_slot_after_four_independent_local_dates(self):
+        readings = [
+            {"local": "2026-08-17T18:07:00-04:00", "occupancy": 20},
+            {"local": "2026-08-24T18:07:00-04:00", "occupancy": 30},
+            {"local": "2026-08-31T18:07:00-04:00", "occupancy": 20},
+            {"local": "2026-09-07T18:07:00-04:00", "occupancy": 30},
+        ]
+
+        self.assertEqual(
+            quiet_window_recommendations(readings),
+            {
+                "status": "available",
+                "items": [
+                    {
+                        "slot": "0-18:00",
+                        "baseline_occupancy": 25.0,
+                        "independent_dates": 4,
+                    }
+                ],
+            },
         )
 
 
@@ -130,7 +237,9 @@ class MainTests(unittest.TestCase):
                 "latest": None,
                 "baselines": {},
                 "recommendations": [],
+                "recommendations_status": "insufficient_data",
                 "correlations": {"status": "insufficient_data"},
+                "class_annotations": {"status": "unavailable", "items": []},
             },
         )
 
@@ -167,9 +276,50 @@ class MainTests(unittest.TestCase):
                     "latest": None,
                     "baselines": {},
                     "recommendations": [],
+                    "recommendations_status": "insufficient_data",
                     "correlations": {"status": "insufficient_data"},
+                    "class_annotations": {"status": "empty", "items": []},
                 },
             )
+
+    def test_main_enriches_latest_reading_and_exposes_class_annotations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            readings_path = Path(directory) / "readings.csv"
+            insights_path = Path(directory) / "insights.json"
+            classes_path = Path(directory) / "classes.csv"
+            readings_path.write_text("timestamp_utc,occupancy,status\n2026-07-03T22:07:00Z,34,light\n")
+            classes_path.write_text(
+                "weekday,start_local,end_local,class_name\n"
+                "4,18:00,19:00,HIIT\n"
+            )
+
+            main(
+                readings_path,
+                insights_path,
+                generated_at="2026-07-03T23:00:00Z",
+                classes_path=classes_path,
+            )
+
+            insights = json.loads(insights_path.read_text())
+            self.assertEqual(insights["latest"]["holiday"], True)
+            self.assertEqual(insights["latest"]["holiday_label"], "Independence Day (observed)")
+            self.assertEqual(insights["class_annotations"]["status"], "available")
+            self.assertEqual(insights["recommendations"], [])
+            self.assertEqual(insights["recommendations_status"], "insufficient_data")
+
+    def test_invalid_class_file_does_not_stop_baseline_publishing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            readings_path = Path(directory) / "readings.csv"
+            insights_path = Path(directory) / "insights.json"
+            classes_path = Path(directory) / "classes.csv"
+            readings_path.write_text("timestamp_utc,occupancy,status\n2026-08-17T22:07:00Z,34,light\n")
+            classes_path.write_text("wrong,header\n")
+
+            main(readings_path, insights_path, generated_at="2026-08-17T23:00:00Z", classes_path=classes_path)
+
+            insights = json.loads(insights_path.read_text())
+            self.assertEqual(insights["baselines"], {"0-18:00": {"median": 34, "n": 1}})
+            self.assertEqual(insights["class_annotations"], {"status": "unavailable", "items": []})
 
     def test_main_loads_weather_once_there_are_twenty_readings(self):
         requested = []
