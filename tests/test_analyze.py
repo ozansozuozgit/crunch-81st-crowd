@@ -582,6 +582,16 @@ class MainTests(unittest.TestCase):
             main(
                 readings_path,
                 insights_path,
+                fetch_json=lambda _url: {
+                    "hourly": {
+                        "time": ["2026-07-03T18:00"],
+                        "temperature_2m": [25.0],
+                        "apparent_temperature": [26.0],
+                        "precipitation": [0.0],
+                        "wind_speed_10m": [8.0],
+                        "weather_code": [0],
+                    }
+                },
                 generated_at="2026-07-03T23:00:00Z",
                 classes_path=classes_path,
             )
