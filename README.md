@@ -10,8 +10,9 @@ it shows progress instead of a recommendation.
 
 Weather, holidays, and the public class schedule are contextual annotations,
 not causal explanations. Where enough data exists, the dashboard labels a
-weather comparison as “Observed association, not proof” and shows its
-independent local dates and historical range.
+weather comparison as “Observed association, not proof”; independent local
+dates are its evidence threshold. The quiet-window stability view shows the
+historical range.
 
 ## Source and collection
 
