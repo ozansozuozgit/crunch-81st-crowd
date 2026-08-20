@@ -696,7 +696,18 @@
   "correlations": {
     "status": "insufficient_data"
   },
-  "generated_at": "2026-08-20T09:10:06.602407+00:00",
+  "factor_context": {
+    "class_schedule_status": "fresh",
+    "holiday_dates": 0,
+    "non_holiday_dates": 4,
+    "weather_progress": {
+      "dry_dates": 2,
+      "rainy_dates": 0,
+      "required_dates_per_group": 20,
+      "status": "collecting"
+    }
+  },
+  "generated_at": "2026-08-20T19:27:30.626579+03:00",
   "latest": {
     "holiday": false,
     "holiday_label": null,
@@ -704,6 +715,14 @@
     "occupancy": 0,
     "status": "light",
     "timestamp_utc": "2026-08-20T09:01:42Z"
+  },
+  "monthly_stability": {
+    "items": [],
+    "status": "insufficient_data"
+  },
+  "quiet_window_details": {
+    "items": [],
+    "status": "insufficient_data"
   },
   "recommendation_progress": {
     "matching_dates": 1,

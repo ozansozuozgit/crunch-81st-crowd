@@ -3,7 +3,7 @@ import json
 import os
 import tempfile
 from datetime import date, datetime, timedelta
-from math import sqrt
+from math import isfinite, sqrt
 from pathlib import Path
 from statistics import fmean, median, variance
 from urllib.parse import urlencode, urlparse
@@ -190,26 +190,73 @@ def load_class_schedule_metadata(path: Path) -> dict[str, str]:
 
 
 def quiet_window_recommendations(readings: list[dict]) -> dict[str, list[dict] | str]:
-    occupancies_by_slot_and_date: dict[str, dict[str, list[int | float]]] = {}
+    details = quiet_window_details(readings)
+    if details["status"] != "ready":
+        return {"status": "insufficient_data", "items": []}
+    return {
+        "status": "ready",
+        "items": [
+            {
+                "slot": detail["slot"],
+                "baseline_occupancy": detail["baseline_occupancy"],
+                "independent_dates": detail["independent_dates"],
+            }
+            for detail in details["items"]
+        ],
+    }
+
+
+def recommendation_progress(readings: list[dict]) -> dict[str, int | str]:
+    grouped = _occupancies_by_slot_and_date(readings)
+    matching_dates = max((len(dates) for dates in grouped.values()), default=0)
+    return {
+        "matching_dates": matching_dates,
+        "required_dates": RECOMMENDATION_REQUIRED_DATES,
+        "status": "ready" if matching_dates >= RECOMMENDATION_REQUIRED_DATES else "collecting",
+    }
+
+
+def _occupancies_by_slot_and_date(readings: list[dict]) -> dict[str, dict[str, list[int | float]]]:
+    """Group interval observations into one independent local date per slot."""
+    grouped: dict[str, dict[str, list[int | float]]] = {}
     for reading in readings:
-        slot = slot_key(reading["local"])
-        local_date = datetime.fromisoformat(reading["local"]).date().isoformat()
-        occupancies_by_slot_and_date.setdefault(slot, {}).setdefault(local_date, []).append(
+        local = datetime.fromisoformat(reading["local"])
+        grouped.setdefault(slot_key(reading["local"]), {}).setdefault(local.date().isoformat(), []).append(
             reading["occupancy"]
         )
+    return grouped
 
+
+def _finite_daily_values(occupancies_by_date: dict[str, list[int | float]]) -> dict[str, float]:
+    daily_values = {}
+    for local_date, values in occupancies_by_date.items():
+        try:
+            daily_value = fmean(values)
+        except (TypeError, ValueError):
+            continue
+        if isfinite(daily_value):
+            daily_values[local_date] = daily_value
+    return daily_values
+
+
+def quiet_window_details(readings: list[dict]) -> dict[str, list[dict] | str]:
     candidates = []
-    for slot, occupancies_by_date in occupancies_by_slot_and_date.items():
-        # A day contributes one averaged observation, regardless of how many
-        # adjacent collection intervals landed in the same ten-minute slot.
-        daily_occupancies = [fmean(values) for values in occupancies_by_date.values()]
-        if len(daily_occupancies) < RECOMMENDATION_REQUIRED_DATES:
+    for slot, occupancies_by_date in _occupancies_by_slot_and_date(readings).items():
+        # Adjacent samples from a single day are reduced to one daily mean.
+        daily_values = _finite_daily_values(occupancies_by_date)
+        if len(daily_values) < RECOMMENDATION_REQUIRED_DATES:
+            continue
+        values = list(daily_values.values())
+        baseline = median(values)
+        spread = max(values) - min(values)
+        if not isfinite(baseline) or not isfinite(spread):
             continue
         candidates.append(
             {
                 "slot": slot,
-                "baseline_occupancy": median(daily_occupancies),
-                "independent_dates": len(daily_occupancies),
+                "baseline_occupancy": baseline,
+                "independent_dates": len(values),
+                "spread": spread,
             }
         )
 
@@ -221,17 +268,81 @@ def quiet_window_recommendations(readings: list[dict]) -> dict[str, list[dict] |
     }
 
 
-def recommendation_progress(readings: list[dict]) -> dict[str, int | str]:
-    dates_by_slot: dict[str, set[str]] = {}
-    for reading in readings:
-        local = datetime.fromisoformat(reading["local"])
-        dates_by_slot.setdefault(slot_key(reading["local"]), set()).add(local.date().isoformat())
+def monthly_stability(readings: list[dict], details: dict) -> dict[str, list[dict] | str]:
+    if details.get("status") != "ready" or not isinstance(details.get("items"), list):
+        return {"status": "insufficient_data", "items": []}
 
-    matching_dates = max((len(dates) for dates in dates_by_slot.values()), default=0)
+    grouped = _occupancies_by_slot_and_date(readings)
+    items = []
+    for detail in details["items"]:
+        if not isinstance(detail, dict) or not isinstance(detail.get("slot"), str):
+            continue
+        daily_values = _finite_daily_values(grouped.get(detail["slot"], {}))
+        values_by_week: dict[tuple[int, int], list[float]] = {}
+        for local_date, value in daily_values.items():
+            iso_year, iso_week, _ = date.fromisoformat(local_date).isocalendar()
+            values_by_week.setdefault((iso_year, iso_week), []).append(value)
+        weekly_values = [fmean(values) for values in values_by_week.values()]
+        if not weekly_values or not all(isfinite(value) for value in weekly_values):
+            continue
+        week_spread = max(weekly_values) - min(weekly_values)
+        if not isfinite(week_spread):
+            continue
+        items.append(
+            {
+                "slot": detail["slot"],
+                "independent_weeks": len(weekly_values),
+                "week_spread": week_spread,
+            }
+        )
+
+    if not items:
+        return {"status": "insufficient_data", "items": []}
+    return {"status": "ready", "items": items}
+
+
+def _weather_progress_default(status: str = "collecting") -> dict[str, int | str]:
     return {
-        "matching_dates": matching_dates,
-        "required_dates": RECOMMENDATION_REQUIRED_DATES,
-        "status": "ready" if matching_dates >= RECOMMENDATION_REQUIRED_DATES else "collecting",
+        "rainy_dates": 0,
+        "dry_dates": 0,
+        "required_dates_per_group": WEATHER_REQUIRED_DATES_PER_GROUP,
+        "status": status,
+    }
+
+
+def _validated_weather_progress(weather_state: object) -> dict[str, int | str]:
+    if not isinstance(weather_state, dict):
+        return _weather_progress_default()
+    status = weather_state.get("status")
+    if status == "unavailable":
+        return _weather_progress_default("unavailable")
+    values = ("rainy_dates", "dry_dates", "required_dates_per_group")
+    if (
+        status not in {"collecting", "eligible"}
+        or any(not isinstance(weather_state.get(key), int) or isinstance(weather_state.get(key), bool) for key in values)
+        or weather_state["rainy_dates"] < 0
+        or weather_state["dry_dates"] < 0
+        or weather_state["required_dates_per_group"] < 1
+    ):
+        return _weather_progress_default()
+    return {key: weather_state[key] for key in (*values, "status")}
+
+
+def factor_context(
+    readings: list[dict], class_schedule_status: str = "unavailable", weather_state: object = None
+) -> dict[str, int | str | dict]:
+    dates: dict[str, bool] = {}
+    for reading in readings:
+        local_date = datetime.fromisoformat(reading["local"]).date().isoformat()
+        holiday = reading.get("holiday")
+        dates[local_date] = holiday if isinstance(holiday, bool) else holiday_context(local_date)["holiday"]
+    return {
+        "holiday_dates": sum(dates.values()),
+        "non_holiday_dates": len(dates) - sum(dates.values()),
+        "weather_progress": _validated_weather_progress(weather_state),
+        "class_schedule_status": class_schedule_status
+        if class_schedule_status in {"fresh", "stale", "unavailable"}
+        else "unavailable",
     }
 
 
@@ -341,12 +452,15 @@ def empty_insights() -> dict:
             "required_dates": RECOMMENDATION_REQUIRED_DATES,
             "status": "collecting",
         },
+        "quiet_window_details": {"status": "insufficient_data", "items": []},
+        "monthly_stability": {"status": "insufficient_data", "items": []},
         "correlations": {"status": "insufficient_data"},
-        "weather_progress": {
-            "rainy_dates": 0,
-            "dry_dates": 0,
-            "required_dates_per_group": WEATHER_REQUIRED_DATES_PER_GROUP,
-            "status": "collecting",
+        "weather_progress": _weather_progress_default(),
+        "factor_context": {
+            "holiday_dates": 0,
+            "non_holiday_dates": 0,
+            "weather_progress": _weather_progress_default(),
+            "class_schedule_status": "unavailable",
         },
         "class_annotations": {"status": "unavailable", "items": []},
         "class_schedule": {"status": "unavailable"},
@@ -373,6 +487,8 @@ def main(
     insights["recommendations"] = recommendations["items"]
     insights["recommendations_status"] = recommendations["status"]
     insights["recommendation_progress"] = recommendation_progress(readings)
+    insights["quiet_window_details"] = quiet_window_details(readings)
+    insights["monthly_stability"] = monthly_stability(readings, insights["quiet_window_details"])
     if readings:
         try:
             weather_by_hour = load_weather(readings, fetch_json or fetch_open_meteo_json)
@@ -395,12 +511,12 @@ def main(
             insights["correlations"] = correlation
             insights["weather_progress"] = weather_progress(rows)
         except (OSError, TypeError, ValueError, KeyError):
-            insights["weather_progress"] = {
-                "rainy_dates": 0,
-                "dry_dates": 0,
-                "required_dates_per_group": WEATHER_REQUIRED_DATES_PER_GROUP,
-                "status": "unavailable",
-            }
+            insights["weather_progress"] = _weather_progress_default("unavailable")
+    insights["factor_context"] = factor_context(
+        readings,
+        insights["class_schedule"]["status"],
+        insights["weather_progress"],
+    )
     _write_json_atomically(insights_path, insights)
     return 0
 

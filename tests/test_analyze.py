@@ -20,7 +20,10 @@ from scripts.analyze import (
     load_weather,
     main,
     median_baseline,
+    factor_context,
+    monthly_stability,
     recommendation_progress,
+    quiet_window_details,
     quiet_window_recommendations,
     slot_key,
     weather_association,
@@ -177,6 +180,90 @@ class ClassScheduleTests(unittest.TestCase):
 
 
 class RecommendationTests(unittest.TestCase):
+    def test_quiet_window_details_average_duplicate_samples_per_local_date(self):
+        readings = [
+            {"local": "2026-08-17T18:01:00-04:00", "occupancy": 20},
+            {"local": "2026-08-17T18:09:00-04:00", "occupancy": 24},
+            {"local": "2026-08-24T18:01:00-04:00", "occupancy": 30},
+            {"local": "2026-08-31T18:01:00-04:00", "occupancy": 20},
+            {"local": "2026-09-07T18:01:00-04:00", "occupancy": 30},
+        ]
+
+        self.assertEqual(
+            quiet_window_details(readings),
+            {
+                "status": "ready",
+                "items": [
+                    {
+                        "slot": "0-18:00",
+                        # The first date contributes its daily mean (22), so
+                        # the median of 22, 30, 20, 30 is 26.
+                        "baseline_occupancy": 26.0,
+                        "independent_dates": 4,
+                        "spread": 10.0,
+                    }
+                ],
+            },
+        )
+
+    def test_monthly_stability_counts_local_iso_weeks_not_adjacent_samples(self):
+        readings = [
+            {"local": "2026-08-17T18:01:00-04:00", "occupancy": 20},
+            {"local": "2026-08-17T18:09:00-04:00", "occupancy": 24},
+            {"local": "2026-08-24T18:01:00-04:00", "occupancy": 30},
+            {"local": "2026-08-31T18:01:00-04:00", "occupancy": 20},
+            {"local": "2026-09-07T18:01:00-04:00", "occupancy": 30},
+        ]
+
+        self.assertEqual(
+            monthly_stability(readings, quiet_window_details(readings)),
+            {
+                "status": "ready",
+                "items": [
+                    {"slot": "0-18:00", "independent_weeks": 4, "week_spread": 10.0}
+                ],
+            },
+        )
+
+    def test_factor_context_counts_each_local_holiday_date_once(self):
+        readings = [
+            {"local": "2026-07-03T18:01:00-04:00", "occupancy": 20, "holiday": True},
+            {"local": "2026-07-03T18:09:00-04:00", "occupancy": 24, "holiday": True},
+            {"local": "2026-07-06T18:01:00-04:00", "occupancy": 30, "holiday": False},
+        ]
+        weather = {
+            "rainy_dates": 1,
+            "dry_dates": 2,
+            "required_dates_per_group": 20,
+            "status": "collecting",
+        }
+
+        self.assertEqual(
+            factor_context(readings, "fresh", weather),
+            {
+                "holiday_dates": 1,
+                "non_holiday_dates": 1,
+                "weather_progress": weather,
+                "class_schedule_status": "fresh",
+            },
+        )
+
+    def test_empty_factor_context_is_explicit_and_non_causal(self):
+        self.assertEqual(
+            factor_context([]),
+            {
+                "holiday_dates": 0,
+                "non_holiday_dates": 0,
+                "weather_progress": {
+                    "rainy_dates": 0,
+                    "dry_dates": 0,
+                    "required_dates_per_group": 20,
+                    "status": "collecting",
+                },
+                "class_schedule_status": "unavailable",
+            },
+        )
+
     def test_reports_maximum_independent_dates_for_an_exact_slot(self):
         readings = [
             {"local": "2026-08-17T18:07:00-04:00", "occupancy": 20},
@@ -361,12 +448,25 @@ class MainTests(unittest.TestCase):
                 "recommendations": [],
                 "recommendations_status": "insufficient_data",
                 "recommendation_progress": {"matching_dates": 0, "required_dates": 4, "status": "collecting"},
+                "quiet_window_details": {"status": "insufficient_data", "items": []},
+                "monthly_stability": {"status": "insufficient_data", "items": []},
                 "correlations": {"status": "insufficient_data"},
                 "weather_progress": {
                     "rainy_dates": 0,
                     "dry_dates": 0,
                     "required_dates_per_group": 20,
                     "status": "collecting",
+                },
+                "factor_context": {
+                    "holiday_dates": 0,
+                    "non_holiday_dates": 0,
+                    "weather_progress": {
+                        "rainy_dates": 0,
+                        "dry_dates": 0,
+                        "required_dates_per_group": 20,
+                        "status": "collecting",
+                    },
+                    "class_schedule_status": "unavailable",
                 },
                 "class_annotations": {"status": "unavailable", "items": []},
                 "class_schedule": {"status": "unavailable"},
@@ -418,12 +518,25 @@ class MainTests(unittest.TestCase):
                     "recommendations": [],
                     "recommendations_status": "insufficient_data",
                     "recommendation_progress": {"matching_dates": 0, "required_dates": 4, "status": "collecting"},
+                    "quiet_window_details": {"status": "insufficient_data", "items": []},
+                    "monthly_stability": {"status": "insufficient_data", "items": []},
                     "correlations": {"status": "insufficient_data"},
                     "weather_progress": {
                         "rainy_dates": 0,
                         "dry_dates": 0,
                         "required_dates_per_group": 20,
                         "status": "collecting",
+                    },
+                    "factor_context": {
+                        "holiday_dates": 0,
+                        "non_holiday_dates": 0,
+                        "weather_progress": {
+                            "rainy_dates": 0,
+                            "dry_dates": 0,
+                            "required_dates_per_group": 20,
+                            "status": "collecting",
+                        },
+                        "class_schedule_status": "unavailable",
                     },
                     "class_annotations": {"status": "empty", "items": []},
                     "class_schedule": {"status": "unavailable"},
@@ -533,6 +646,7 @@ class MainTests(unittest.TestCase):
                     "status": "collecting",
                 },
             )
+            self.assertEqual(insights["factor_context"]["weather_progress"], insights["weather_progress"])
 
     def test_main_publishes_baselines_when_weather_loading_fails(self):
         def fetch_json(_url):
@@ -563,6 +677,22 @@ class MainTests(unittest.TestCase):
                     "status": "unavailable",
                 },
             )
+            self.assertEqual(insights["factor_context"]["weather_progress"], insights["weather_progress"])
+
+    def test_malformed_weather_response_marks_both_weather_contexts_unavailable(self):
+        def fetch_json(_url):
+            return {"unexpected": "shape"}
+
+        with tempfile.TemporaryDirectory() as directory:
+            readings_path = Path(directory) / "readings.csv"
+            insights_path = Path(directory) / "insights.json"
+            readings_path.write_text("timestamp_utc,occupancy,status\n2026-08-17T22:07:00Z,34,light\n")
+
+            main(readings_path, insights_path, fetch_json, "2026-08-17T23:00:00Z")
+
+            insights = json.loads(insights_path.read_text())
+            self.assertEqual(insights["weather_progress"]["status"], "unavailable")
+            self.assertEqual(insights["factor_context"]["weather_progress"], insights["weather_progress"])
 
     def test_main_publishes_stale_class_schedule_metadata_without_calling_it_fresh(self):
         with tempfile.TemporaryDirectory() as directory:
