@@ -371,6 +371,10 @@
     "2-22:00": {
       "median": 953,
       "n": 1
+    },
+    "3-05:00": {
+      "median": 0,
+      "n": 1
     }
   },
   "class_annotations": {
@@ -685,21 +689,21 @@
     "status": "available"
   },
   "class_schedule": {
-    "fetched_at": "2026-08-20T08:48:33.019794Z",
+    "fetched_at": "2026-08-20T09:10:05.537609Z",
     "source_url": "https://class-prod.crunch.com/week_schedule.pdf?button_location=web&club_id=40&options=group",
     "status": "fresh"
   },
   "correlations": {
     "status": "insufficient_data"
   },
-  "generated_at": "2026-08-20T11:54:04.912931+03:00",
+  "generated_at": "2026-08-20T09:10:06.602407+00:00",
   "latest": {
     "holiday": false,
     "holiday_label": null,
-    "local": "2026-08-19T22:03:35-04:00",
-    "occupancy": 953,
-    "status": "active",
-    "timestamp_utc": "2026-08-20T02:03:35Z"
+    "local": "2026-08-20T05:01:42-04:00",
+    "occupancy": 0,
+    "status": "light",
+    "timestamp_utc": "2026-08-20T09:01:42Z"
   },
   "recommendation_progress": {
     "matching_dates": 1,
@@ -709,7 +713,7 @@
   "recommendations": [],
   "recommendations_status": "insufficient_data",
   "weather_progress": {
-    "dry_dates": 1,
+    "dry_dates": 2,
     "rainy_dates": 0,
     "required_dates_per_group": 20,
     "status": "collecting"
