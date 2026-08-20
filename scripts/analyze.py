@@ -239,6 +239,14 @@ def _finite_daily_values(occupancies_by_date: dict[str, list[int | float]]) -> d
     return daily_values
 
 
+def _weekly_values(daily_values: dict[str, float]) -> list[float]:
+    values_by_week: dict[tuple[int, int], list[float]] = {}
+    for local_date, value in daily_values.items():
+        iso_year, iso_week, _ = date.fromisoformat(local_date).isocalendar()
+        values_by_week.setdefault((iso_year, iso_week), []).append(value)
+    return [fmean(values) for values in values_by_week.values()]
+
+
 def quiet_window_details(readings: list[dict]) -> dict[str, list[dict] | str]:
     candidates = []
     for slot, occupancies_by_date in _occupancies_by_slot_and_date(readings).items():
@@ -249,13 +257,15 @@ def quiet_window_details(readings: list[dict]) -> dict[str, list[dict] | str]:
         values = list(daily_values.values())
         baseline = median(values)
         spread = max(values) - min(values)
-        if not isfinite(baseline) or not isfinite(spread):
+        weekly_values = _weekly_values(daily_values)
+        if not isfinite(baseline) or not isfinite(spread) or not all(isfinite(value) for value in weekly_values):
             continue
         candidates.append(
             {
                 "slot": slot,
                 "baseline_occupancy": baseline,
                 "independent_dates": len(values),
+                "independent_weeks": len(weekly_values),
                 "spread": spread,
             }
         )
@@ -278,11 +288,7 @@ def monthly_stability(readings: list[dict], details: dict) -> dict[str, list[dic
         if not isinstance(detail, dict) or not isinstance(detail.get("slot"), str):
             continue
         daily_values = _finite_daily_values(grouped.get(detail["slot"], {}))
-        values_by_week: dict[tuple[int, int], list[float]] = {}
-        for local_date, value in daily_values.items():
-            iso_year, iso_week, _ = date.fromisoformat(local_date).isocalendar()
-            values_by_week.setdefault((iso_year, iso_week), []).append(value)
-        weekly_values = [fmean(values) for values in values_by_week.values()]
+        weekly_values = _weekly_values(daily_values)
         if not weekly_values or not all(isfinite(value) for value in weekly_values):
             continue
         week_spread = max(weekly_values) - min(weekly_values)

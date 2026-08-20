@@ -200,6 +200,7 @@ class RecommendationTests(unittest.TestCase):
                         # the median of 22, 30, 20, 30 is 26.
                         "baseline_occupancy": 26.0,
                         "independent_dates": 4,
+                        "independent_weeks": 4,
                         "spread": 10.0,
                     }
                 ],
@@ -224,6 +225,30 @@ class RecommendationTests(unittest.TestCase):
                 ],
             },
         )
+
+    def test_monthly_stability_averages_multiple_dates_in_one_iso_week_once(self):
+        readings = [
+            {"local": "2026-08-17T18:01:00-04:00", "occupancy": 20},
+            {"local": "2026-08-18T18:01:00-04:00", "occupancy": 40},
+            {"local": "2026-08-24T18:01:00-04:00", "occupancy": 30},
+        ]
+        details = {
+            "status": "ready",
+            "items": [{"slot": "weekday-18:00", "independent_dates": 3}],
+        }
+
+        # A slot normally implies one weekday, so this deliberately fixes the
+        # slot key to exercise the ISO-week reducer with distinct local dates.
+        with mock.patch.object(analyze, "slot_key", return_value="weekday-18:00"):
+            self.assertEqual(
+                monthly_stability(readings, details),
+                {
+                    "status": "ready",
+                    "items": [
+                        {"slot": "weekday-18:00", "independent_weeks": 2, "week_spread": 0.0}
+                    ],
+                },
+            )
 
     def test_factor_context_counts_each_local_holiday_date_once(self):
         readings = [
