@@ -423,6 +423,62 @@
     "3-12:20": {
       "median": 349,
       "n": 1
+    },
+    "3-13:00": {
+      "median": 381,
+      "n": 1
+    },
+    "3-13:30": {
+      "median": 412,
+      "n": 1
+    },
+    "3-14:00": {
+      "median": 422,
+      "n": 1
+    },
+    "3-14:50": {
+      "median": 469,
+      "n": 1
+    },
+    "3-15:20": {
+      "median": 481,
+      "n": 1
+    },
+    "3-15:50": {
+      "median": 499,
+      "n": 1
+    },
+    "3-16:10": {
+      "median": 520,
+      "n": 1
+    },
+    "3-16:50": {
+      "median": 563,
+      "n": 1
+    },
+    "3-17:10": {
+      "median": 578,
+      "n": 1
+    },
+    "3-17:40": {
+      "median": 635,
+      "n": 1
+    },
+    "3-18:00": {
+      "median": 659,
+      "n": 1
+    },
+    "3-18:30": {
+      "median": 675,
+      "n": 1
+    },
+    "3-19:00": {
+      "median": 685,
+      "n": 1
+    },
+    "3-19:30": {
+      "median": 715,
+      "n": 1
     }
   },
   "class_annotations": {
@@ -737,7 +793,7 @@
     "status": "available"
   },
   "class_schedule": {
-    "fetched_at": "2026-08-20T16:52:20.883765Z",
+    "fetched_at": "2026-08-20T23:46:42.969557Z",
     "source_url": "https://class-prod.crunch.com/week_schedule.pdf?button_location=web&club_id=40&options=group",
     "status": "fresh"
   },
@@ -749,20 +805,20 @@
     "holiday_dates": 0,
     "non_holiday_dates": 4,
     "weather_progress": {
-      "dry_dates": 2,
+      "dry_dates": 1,
       "rainy_dates": 0,
       "required_dates_per_group": 20,
       "status": "collecting"
     }
   },
-  "generated_at": "2026-08-20T16:52:21.586547+00:00",
+  "generated_at": "2026-08-20T23:46:43.780380+00:00",
   "latest": {
     "holiday": false,
     "holiday_label": null,
-    "local": "2026-08-20T12:26:26-04:00",
-    "occupancy": 349,
-    "status": "moderate",
-    "timestamp_utc": "2026-08-20T16:26:26Z"
+    "local": "2026-08-20T19:34:36-04:00",
+    "occupancy": 715,
+    "status": "active",
+    "timestamp_utc": "2026-08-20T23:34:36Z"
   },
   "monthly_stability": {
     "items": [],
@@ -780,7 +836,7 @@
   "recommendations": [],
   "recommendations_status": "insufficient_data",
   "weather_progress": {
-    "dry_dates": 2,
+    "dry_dates": 1,
     "rainy_dates": 0,
     "required_dates_per_group": 20,
     "status": "collecting"
