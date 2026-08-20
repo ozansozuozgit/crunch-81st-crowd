@@ -208,6 +208,15 @@ class ScheduleSyncTests(unittest.TestCase):
             meta_path = Path(directory) / "classes_meta.json"
             known_good = "weekday,start_local,end_local,class_name\n0,08:00,09:00,Old class\n"
             classes_path.write_text(known_good)
+            meta_path.write_text(
+                json.dumps(
+                    {
+                        "status": "fresh",
+                        "source_url": sync_classes.SOURCE_URL,
+                        "fetched_at": "2026-08-19T12:30:00Z",
+                    }
+                )
+            )
 
             result = sync_classes.sync(
                 lambda: (_ for _ in ()).throw(TimeoutError("upstream unavailable")),
@@ -221,8 +230,28 @@ class ScheduleSyncTests(unittest.TestCase):
             metadata = json.loads(meta_path.read_text())
             self.assertEqual(metadata["status"], "stale")
             self.assertEqual(metadata["source_url"], sync_classes.SOURCE_URL)
-            self.assertEqual(metadata["fetched_at"], "2026-08-20T12:30:00Z")
+            self.assertEqual(metadata["fetched_at"], "2026-08-19T12:30:00Z")
+            self.assertEqual(metadata["last_attempt_at"], "2026-08-20T12:30:00Z")
             self.assertEqual(metadata["error"], {"class": "TimeoutError", "message": "upstream unavailable"})
+
+    def test_stale_retention_without_prior_metadata_does_not_invent_a_verified_time(self):
+        now = datetime(2026, 8, 20, 12, 30, tzinfo=timezone.utc)
+        with tempfile.TemporaryDirectory() as directory:
+            classes_path = Path(directory) / "classes.csv"
+            meta_path = Path(directory) / "classes_meta.json"
+            classes_path.write_text("weekday,start_local,end_local,class_name\n0,08:00,09:00,Old class\n")
+
+            sync_classes.sync(
+                lambda: (_ for _ in ()).throw(TimeoutError("upstream unavailable")),
+                classes_path,
+                meta_path,
+                now,
+            )
+
+            metadata = json.loads(meta_path.read_text())
+            self.assertEqual(metadata["status"], "stale")
+            self.assertNotIn("fetched_at", metadata)
+            self.assertEqual(metadata["last_attempt_at"], "2026-08-20T12:30:00Z")
 
 
 class CommandLineTests(unittest.TestCase):

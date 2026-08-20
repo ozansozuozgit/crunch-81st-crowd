@@ -108,6 +108,7 @@ class ClassScheduleTests(unittest.TestCase):
                         "status": "stale",
                         "source_url": "https://class-prod.crunch.com/week_schedule.pdf?club_id=40",
                         "fetched_at": "2026-08-20T08:48:33Z",
+                        "last_attempt_at": "2026-08-20T09:48:33Z",
                     }
                 )
             )
@@ -118,6 +119,7 @@ class ClassScheduleTests(unittest.TestCase):
                     "status": "stale",
                     "source_url": "https://class-prod.crunch.com/week_schedule.pdf?club_id=40",
                     "fetched_at": "2026-08-20T08:48:33Z",
+                    "last_attempt_at": "2026-08-20T09:48:33Z",
                 },
             )
 
@@ -152,6 +154,21 @@ class ClassScheduleTests(unittest.TestCase):
                         "status": "fresh",
                         "source_url": "https://class-prod.crunch.com/week_schedule.pdf?club_id=40",
                         "fetched_at": "2026-08-20",
+                    }
+                )
+            )
+
+            self.assertEqual(load_class_schedule_metadata(path), {"status": "unavailable"})
+
+    def test_stale_metadata_without_verified_timestamp_is_unavailable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "classes_meta.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "status": "stale",
+                        "source_url": "https://class-prod.crunch.com/week_schedule.pdf?club_id=40",
+                        "last_attempt_at": "2026-08-20T09:48:33Z",
                     }
                 )
             )
@@ -561,6 +578,7 @@ class MainTests(unittest.TestCase):
                         "status": "stale",
                         "source_url": "https://class-prod.crunch.com/week_schedule.pdf?club_id=40",
                         "fetched_at": "2026-08-20T08:48:33Z",
+                        "last_attempt_at": "2026-08-20T09:48:33Z",
                     }
                 )
             )
@@ -579,6 +597,7 @@ class MainTests(unittest.TestCase):
                     "status": "stale",
                     "source_url": "https://class-prod.crunch.com/week_schedule.pdf?club_id=40",
                     "fetched_at": "2026-08-20T08:48:33Z",
+                    "last_attempt_at": "2026-08-20T09:48:33Z",
                 },
             )
 

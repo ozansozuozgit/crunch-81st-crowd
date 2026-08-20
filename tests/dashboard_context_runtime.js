@@ -78,15 +78,17 @@ assert.match(elements.get("class-source").textContent, /last verified/);
 
 const staleSchedule = {
   ...freshSchedule,
-  class_schedule: { ...freshSchedule.class_schedule, status: "stale" },
+  class_schedule: { ...freshSchedule.class_schedule, status: "stale", last_attempt_at: "2026-08-20T09:48:33Z" },
 };
 hooks.renderClassAnnotations(staleSchedule);
 assert.match(elements.get("class-source").textContent, /retained schedule may be out of date/);
+assert.match(elements.get("class-source").textContent, /Refresh failed/);
 
 for (const invalidSchedule of [
   { class_schedule: { ...freshSchedule.class_schedule, source_url: "http://class-prod.crunch.com/week_schedule.pdf" } },
   { class_schedule: { ...freshSchedule.class_schedule, source_url: "https://example.test/schedule.pdf" } },
   { class_schedule: { ...freshSchedule.class_schedule, fetched_at: "2026-08-20" } },
+  { class_schedule: { ...staleSchedule.class_schedule, last_attempt_at: "2026-08-20" } },
 ]) {
   assert.equal(hooks.validClassSchedule(invalidSchedule), null);
 }

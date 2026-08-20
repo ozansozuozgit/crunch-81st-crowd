@@ -18,11 +18,13 @@ class DashboardContextContracts(unittest.TestCase):
             "source.username || source.password",
             'source.hostname !== "class-prod.crunch.com"',
             "isTimezoneAwareTimestamp(schedule.fetched_at)",
+            "isTimezoneAwareTimestamp(schedule.last_attempt_at)",
             "function renderClassAnnotations(insights)",
             "const schedule = validClassSchedule(insights);",
             "const annotations = schedule ? validClassAnnotations(insights) : [];",
             'schedule.status === "stale"',
-            "This retained schedule may be out of date",
+            "Refresh failed",
+            "retained schedule may be out of date",
         ):
             self.assertIn(contract, self.page)
 

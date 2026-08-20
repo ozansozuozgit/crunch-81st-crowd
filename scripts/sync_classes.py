@@ -244,6 +244,23 @@ def _safe_error(error: Exception) -> dict[str, str]:
     }
 
 
+def _last_verified_at(meta_path: Path) -> str | None:
+    """Return the prior verified timestamp only when it is safe to retain."""
+    try:
+        metadata = json.loads(Path(meta_path).read_text(encoding="utf-8"))
+        verified_at = metadata["fetched_at"]
+        if metadata.get("status") not in {"fresh", "stale"} or metadata.get("source_url") != SOURCE_URL:
+            return None
+        if not isinstance(verified_at, str):
+            return None
+        parsed = datetime.fromisoformat(verified_at.replace("Z", "+00:00"))
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            return None
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return None
+    return verified_at
+
+
 def sync(fetch_bytes, classes_path: Path, meta_path: Path, now: datetime) -> dict:
     """Refresh the known-good schedule; safely retain it if refresh fails."""
     classes_path = Path(classes_path)
@@ -263,18 +280,18 @@ def sync(fetch_bytes, classes_path: Path, meta_path: Path, now: datetime) -> dic
         return {"status": "fresh", "class_count": len(rows)}
     except Exception as error:
         retained_count = _existing_class_count(classes_path)
+        metadata = {
+            "status": "stale",
+            "source_url": SOURCE_URL,
+            "last_attempt_at": fetched_at,
+            "error": _safe_error(error),
+        }
+        verified_at = _last_verified_at(meta_path)
+        if verified_at is not None:
+            metadata["fetched_at"] = verified_at
         _atomic_write(
             meta_path,
-            json.dumps(
-                {
-                    "status": "stale",
-                    "source_url": SOURCE_URL,
-                    "fetched_at": fetched_at,
-                    "error": _safe_error(error),
-                },
-                indent=2,
-            )
-            + "\n",
+            json.dumps(metadata, indent=2) + "\n",
         )
         return {"status": "stale", "class_count": retained_count}
 

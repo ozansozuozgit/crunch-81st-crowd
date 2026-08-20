@@ -154,6 +154,7 @@ def load_class_schedule_metadata(path: Path) -> dict[str, str]:
         status = metadata["status"]
         source_url = metadata["source_url"]
         fetched_at = metadata["fetched_at"]
+        last_attempt_at = metadata.get("last_attempt_at")
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, ValueError):
         return {"status": "unavailable"}
 
@@ -161,11 +162,17 @@ def load_class_schedule_metadata(path: Path) -> dict[str, str]:
         status not in {"fresh", "stale"}
         or not isinstance(source_url, str)
         or not isinstance(fetched_at, str)
+        or (last_attempt_at is not None and not isinstance(last_attempt_at, str))
     ):
         return {"status": "unavailable"}
     try:
         parsed_url = urlparse(source_url)
         fetched_datetime = datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
+        attempt_datetime = (
+            datetime.fromisoformat(last_attempt_at.replace("Z", "+00:00"))
+            if last_attempt_at is not None
+            else None
+        )
     except ValueError:
         return {"status": "unavailable"}
     if (
@@ -173,9 +180,13 @@ def load_class_schedule_metadata(path: Path) -> dict[str, str]:
         or not parsed_url.netloc
         or fetched_datetime.tzinfo is None
         or fetched_datetime.utcoffset() is None
+        or (attempt_datetime is not None and (attempt_datetime.tzinfo is None or attempt_datetime.utcoffset() is None))
     ):
         return {"status": "unavailable"}
-    return {"status": status, "source_url": source_url, "fetched_at": fetched_at}
+    schedule = {"status": status, "source_url": source_url, "fetched_at": fetched_at}
+    if last_attempt_at is not None:
+        schedule["last_attempt_at"] = last_attempt_at
+    return schedule
 
 
 def quiet_window_recommendations(readings: list[dict]) -> dict[str, list[dict] | str]:

@@ -475,10 +475,16 @@
           const schedule = insights && insights.class_schedule;
           if (!schedule || typeof schedule !== "object" || !["fresh", "stale"].includes(schedule.status)) return null;
           if (typeof schedule.source_url !== "string" || !isTimezoneAwareTimestamp(schedule.fetched_at)) return null;
+          if (schedule.last_attempt_at !== undefined && !isTimezoneAwareTimestamp(schedule.last_attempt_at)) return null;
           try {
             const source = new URL(schedule.source_url);
             if (source.protocol !== "https:" || source.username || source.password || source.hostname !== "class-prod.crunch.com") return null;
-            return { status: schedule.status, source, fetchedAt: safeDate(schedule.fetched_at) };
+            return {
+              status: schedule.status,
+              source,
+              fetchedAt: safeDate(schedule.fetched_at),
+              lastAttemptAt: schedule.last_attempt_at ? safeDate(schedule.last_attempt_at) : null,
+            };
           } catch (_) {
             return null;
           }
@@ -509,7 +515,8 @@
           link.target = "_blank";
           sourceNote.append("Source: ", link, document.createTextNode(` · last verified ${fmt.format(schedule.fetchedAt)}`));
           if (schedule.status === "stale") {
-            sourceNote.append(document.createTextNode(" · This retained schedule may be out of date."));
+            const attempt = schedule.lastAttemptAt ? ` Refresh failed ${fmt.format(schedule.lastAttemptAt)};` : " Schedule is stale;";
+            sourceNote.append(document.createTextNode(`${attempt} retained schedule may be out of date.`));
           }
         }
 

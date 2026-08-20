@@ -41,7 +41,9 @@ begins.
   official source and the last verified fetch time. If Crunch's PDF is
   temporarily unavailable or cannot be validated, the last known valid schedule
   is retained and explicitly marked **stale** in the dashboard rather than
-  silently removed or presented as current.
+  silently removed or presented as current. In that state, `fetched_at` remains
+  the last verified schedule time while `last_attempt_at` records the failed
+  refresh attempt.
 
 The dashboard shows collection progress but does not lower its evidence
 thresholds: a quiet time needs **four independent local dates for the same
