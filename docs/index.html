@@ -73,9 +73,18 @@
       .median small { display: block; font-family: var(--ui); font-size: .56rem; letter-spacing: .06em; text-transform: uppercase; }
       .weather { margin-top: 42px; }
       .weather .paper { border-left: 7px solid var(--orange); }
-      .weather-state { color: var(--orange-deep); font-family: var(--display); font-size: clamp(2.15rem, 5vw, 3.6rem); font-weight: 400; line-height: .9; margin: 8px 0 14px; text-transform: uppercase; }
-      .weather-copy { max-width: 68ch; }
-      .weather-copy strong { font-family: var(--ui); font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; }
+      .stability-strip { display: grid; gap: 9px; }
+      .stability-item { align-items: baseline; border-bottom: 1px solid var(--rule); display: grid; gap: 10px; grid-template-columns: minmax(112px, 1fr) auto; padding: 11px 0; }
+      .stability-item:last-child { border-bottom: 0; }
+      .stability-item strong { font-family: var(--display); font-size: 1.45rem; font-weight: 400; line-height: 1; }
+      .stability-item span { color: var(--muted); font-family: var(--ui); font-size: .69rem; font-weight: 700; letter-spacing: .04em; text-align: right; text-transform: uppercase; }
+      .factor-grid { display: grid; gap: 0; grid-template-columns: repeat(3, 1fr); }
+      .factor-grid p { border-left: 1px solid var(--rule); font-size: .98rem; margin: 0; padding: 0 18px; }
+      .factor-grid p:first-child { border-left: 0; padding-left: 0; }
+      .factor-grid strong { color: var(--orange-deep); display: block; font-family: var(--ui); font-size: .67rem; letter-spacing: .08em; margin-bottom: 6px; text-transform: uppercase; }
+      .schedule-context { border-top: 1px solid rgba(242,236,223,.4); color: var(--paper-dim); margin-top: 30px; padding-top: 14px; }
+      .schedule-context p { margin-bottom: 0; }
+      .schedule-context a { color: var(--paper); }
       .methods { border-top: 1px solid rgba(242,236,223,.4); margin-top: 46px; padding-top: 20px; }
       .methods h2 { color: var(--orange); font-family: var(--display); font-size: 2.1rem; font-weight: 400; margin-bottom: 10px; text-transform: uppercase; }
       .methods-grid { display: grid; gap: 20px; grid-template-columns: repeat(3, 1fr); }
@@ -89,7 +98,9 @@
         .masthead { padding-top: 14px; }
         .kicker { align-items: flex-start; flex-direction: column; }
         h1 { margin-top: 34px; }
-        .status-strip, .grid, .methods-grid { grid-template-columns: 1fr; }
+        .status-strip, .grid, .methods-grid, .factor-grid { grid-template-columns: 1fr; }
+        .factor-grid p, .factor-grid p:first-child { border-left: 0; border-top: 1px solid var(--rule); padding: 13px 0; }
+        .factor-grid p:first-child { border-top: 0; padding-top: 0; }
         .latest, .signal { padding: 21px; }
         .section-heading { align-items: flex-start; flex-direction: column; gap: 7px; }
         .section-heading p { text-align: left; }
@@ -122,8 +133,8 @@
         </div>
       </section>
 
-      <section aria-labelledby="chart-heading">
-        <div class="section-heading"><h2 id="chart-heading">Last 24 measured hours</h2><p id="chart-period">Awaiting readings</p></div>
+      <section aria-labelledby="today-heading">
+        <div class="section-heading"><h2 id="today-heading">Today's recorded rhythm</h2><p id="chart-period">Awaiting readings</p></div>
         <div class="paper chart-wrap" id="chart-region">
           <p class="chart-empty" id="chart-empty">No readings have been collected in the last 24 hours.</p>
           <svg id="occupancy-chart" viewBox="0 0 920 310" role="img" aria-labelledby="chart-title chart-desc" hidden>
@@ -135,8 +146,16 @@
       </section>
 
       <div class="grid">
-        <section aria-labelledby="heatmap-heading">
-          <div class="section-heading"><h2 id="heatmap-heading">Week / hour field</h2><p>Historical medians</p></div>
+        <section aria-labelledby="quiet-heading">
+          <div class="section-heading"><h2 id="quiet-heading">Best quiet workout windows</h2><p>Qualified history</p></div>
+          <div class="paper">
+            <ol class="quiet-list" id="quiet-list"></ol>
+            <p class="empty-note" id="quiet-empty">Not enough evidence yet. A time window needs four independent local dates before it can be recommended.</p>
+          </div>
+        </section>
+
+        <section aria-labelledby="pattern-heading">
+          <div class="section-heading"><h2 id="pattern-heading">Week / hour pattern</h2><p>Historical medians</p></div>
           <div class="paper">
             <div class="heatmap-scroll">
               <table class="heatmap" id="heatmap"><caption class="sr-only">Historical median occupancy by weekday and New York hour</caption></table>
@@ -144,41 +163,35 @@
             <div class="heatmap-key" aria-hidden="true"><span>Lower</span><span class="key-gradient"></span><span>Higher</span></div>
             <p class="empty-note" id="heatmap-empty">No readings have been collected yet.</p>
           </div>
-        </section>
-
-        <section aria-labelledby="quiet-heading">
-          <div class="section-heading"><h2 id="quiet-heading">Quietest windows</h2><p>Historical, not live</p></div>
           <div class="paper">
-            <ol class="quiet-list" id="quiet-list"></ol>
-            <p class="empty-note" id="quiet-empty">Not enough evidence yet. A time window needs four independent local dates before it can be recommended.</p>
+            <p class="data-note">Month stability</p>
+            <div class="stability-strip" id="stability-strip"></div>
+            <p class="empty-note" id="stability-empty">Week-to-week stability appears after quiet windows qualify.</p>
           </div>
         </section>
       </div>
 
-      <section class="weather" aria-labelledby="classes-heading">
-        <div class="section-heading"><h2 id="classes-heading">Class-time annotations</h2><p>Schedule context, not causal evidence</p></div>
+      <section class="weather" aria-labelledby="factors-heading">
+        <div class="section-heading"><h2 id="factors-heading">What may matter</h2><p>Context, not a promise</p></div>
         <div class="paper">
-          <ul class="quiet-list" id="class-list" aria-describedby="class-note"></ul>
-          <p class="empty-note" id="class-empty">No class-time annotations are published yet.</p>
-          <p class="data-note" id="class-source" hidden></p>
-          <p class="weather-copy" id="class-note"><strong>Context only</strong> — Published class times can coincide with traffic, but they do not demonstrate that a class caused a crowd change.</p>
+          <div class="factor-grid">
+            <p id="factor-weather"><strong>Weather</strong>Collecting context.</p>
+            <p id="factor-holidays"><strong>Holidays</strong>Collecting local dates.</p>
+            <p id="factor-schedule"><strong>Schedule</strong>Source context unavailable.</p>
+          </div>
         </div>
       </section>
 
-      <section class="weather" aria-labelledby="weather-heading">
-        <div class="section-heading"><h2 id="weather-heading">Weather check</h2><p>Evidence threshold applied</p></div>
-        <div class="paper">
-          <p class="weather-state" id="weather-state">Not enough evidence yet</p>
-          <p class="weather-copy" id="weather-copy">Weather is only described after the analysis finds a decisive result across enough independent local dates.</p>
-        </div>
-      </section>
+      <aside class="schedule-context" id="schedule-context" aria-live="polite" hidden>
+        <p class="data-note" id="schedule-source"></p>
+      </aside>
 
       <aside class="methods" aria-labelledby="methods-heading">
         <h2 id="methods-heading">Read this correctly</h2>
         <div class="methods-grid">
           <p><strong>Source</strong><br />Counts are collected from Crunch’s public occupancy signal for E 81st St.</p>
           <p><strong>Limit</strong><br />This is not guaranteed to be a literal headcount; it reflects the club’s public system.</p>
-          <p><strong>Inference</strong><br />A correlation is not causation. Weather and time patterns are observations, not promises.</p>
+          <p><strong>Inference</strong><br />Patterns are recorded observations, not promises. Context may matter without proving a reason.</p>
         </div>
       </aside>
     </main>
@@ -264,10 +277,11 @@
           if (!latest) return;
           $("latest-count").textContent = String(latest.occupancy);
           $("latest-unit").textContent = "recorded count";
-          $("latest-time").innerHTML = "Measured <strong></strong>";
-          $("latest-time").querySelector("strong").textContent = fmt.format(latest.date);
+          const measured = document.createElement("strong");
+          measured.textContent = fmt.format(latest.date);
+          $("latest-time").replaceChildren("Measured ", measured);
           $("signal-state").textContent = latest.status ? `${latest.status}\nrecorded` : "Reading\nrecorded";
-          $("signal-copy").textContent = "This is the latest stored measurement, not an estimate or forecast.";
+          $("signal-copy").textContent = "This is the latest stored measurement, not an estimate or prediction.";
           const generated = safeDate(insights.generated_at);
           $("updated-at").textContent = generated ? `Insights generated: ${fmt.format(generated)}` : `Latest measurement: ${fmt.format(latest.date)}`;
         }
@@ -280,19 +294,19 @@
           $("signal-copy").textContent = "No live count is shown until a valid public readings file is available. Refresh to retry.";
           $("chart-period").textContent = "Data unavailable";
           $("chart-empty").textContent = "Data unavailable. The public readings file could not be loaded or validated; refresh this page to retry.";
-          $("chart-caption").textContent = "No crowd chart is displayed because the public readings file is unavailable.";
+          $("chart-caption").textContent = "No crowd chart is displayed while the public readings file is unavailable.";
           $("heatmap-empty").textContent = "Data unavailable. Refresh this page to retry loading the public readings file.";
           $("heatmap").replaceChildren();
           $("quiet-list").replaceChildren();
           $("quiet-empty").textContent = "Data unavailable. Refresh this page to retry loading the public readings file.";
-          $("class-list").replaceChildren();
-          $("class-empty").hidden = false;
-          $("class-empty").textContent = "Data unavailable. Refresh this page to retry loading the public readings file before relying on class-time annotations.";
-          $("class-source").replaceChildren();
-          $("class-source").hidden = true;
-          $("class-note").replaceChildren("Class-time annotations are not displayed while the public readings file is unavailable.");
-          $("weather-state").textContent = "Data unavailable";
-          $("weather-copy").textContent = "Weather evidence is unavailable while the public readings file is unavailable.";
+          $("stability-strip").replaceChildren();
+          $("stability-empty").hidden = false;
+          $("stability-empty").textContent = "Data unavailable. Stability needs valid public readings.";
+          $("factor-weather").replaceChildren();
+          $("factor-holidays").replaceChildren();
+          $("factor-schedule").replaceChildren();
+          $("schedule-source").replaceChildren();
+          $("schedule-context").hidden = true;
           $("updated-at").textContent = "Data status: unavailable";
         }
 
@@ -406,41 +420,6 @@
           return `${days[parsed.weekdayIndex]} · ${clock(startMinutes)}–${clock(startMinutes + 60)} ET`;
         }
 
-        function validRecommendations(insights) {
-          if (!insights || insights.recommendations_status !== "ready" || !Array.isArray(insights.recommendations)) return [];
-          const items = insights.recommendations.map((item) => {
-            if (!item || typeof item !== "object" || !recommendationWindowLabel(item.slot)) return null;
-            const baseline = item.baseline_occupancy;
-            const dates = item.independent_dates;
-            return typeof baseline === "number" && Number.isFinite(baseline) && baseline >= 0 && typeof dates === "number" && Number.isFinite(dates) && Number.isInteger(dates) && dates >= 4
-              ? { slot: item.slot, baseline, dates }
-              : null;
-          });
-          return items.some((item) => item === null) ? [] : items;
-        }
-
-        function renderQuietWindows(insights) {
-          const recommendations = validRecommendations(insights);
-          if (!recommendations.length) {
-            const progress = validRecommendationProgress(insights);
-            $("quiet-empty").textContent = progress
-              ? `Tracking: ${progress.matchingDates} / 4 matching weekday-time observations.`
-              : "Not enough evidence yet. A time window needs four independent local dates before it can be recommended.";
-            return;
-          }
-          $("quiet-empty").hidden = true;
-          const list = $("quiet-list");
-          recommendations.forEach((recommendation, index) => {
-            const item = document.createElement("li");
-            const rank = document.createElement("span"); rank.className = "rank"; rank.textContent = `0${index + 1}`;
-            const window = document.createElement("span"); window.className = "window"; window.textContent = recommendationWindowLabel(recommendation.slot);
-            const details = document.createElement("small"); details.textContent = `${recommendation.dates} independent local dates`; window.append(details);
-            const number = document.createElement("span"); number.className = "median"; number.textContent = Number.isInteger(recommendation.baseline) ? String(recommendation.baseline) : recommendation.baseline.toFixed(1);
-            const numberLabel = document.createElement("small"); numberLabel.textContent = "typical"; number.append(numberLabel);
-            item.append(rank, window, number); list.append(item);
-          });
-        }
-
         function validRecommendationProgress(insights) {
           const progress = insights && insights.recommendation_progress;
           if (!progress || typeof progress !== "object" || progress.status !== "collecting") return null;
@@ -450,20 +429,45 @@
           return { matchingDates };
         }
 
-        function validClassAnnotations(insights) {
-          const annotations = insights && insights.class_annotations;
-          if (!annotations || typeof annotations !== "object" || !["available", "partial"].includes(annotations.status) || !Array.isArray(annotations.items)) return [];
-          const items = annotations.items.map((item) => {
-            const weekday = item && item.weekday;
-            const start = item && item.start_local;
-            const end = item && item.end_local;
-            const className = item && item.class_name;
-            const validTime = (time) => typeof time === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
-            return typeof weekday === "number" && Number.isFinite(weekday) && Number.isInteger(weekday) && weekday >= 0 && weekday <= 6 && validTime(start) && validTime(end) && start < end && typeof className === "string" && className.trim()
-              ? { weekday, start, end, className: className.trim() }
-              : null;
+        function validQuietDetails(insights) {
+          const details = insights && insights.quiet_window_details;
+          if (!details || typeof details !== "object" || details.status !== "ready" || !Array.isArray(details.items)) return [];
+          const items = details.items.map((item) => {
+            if (!item || typeof item !== "object" || !recommendationWindowLabel(item.slot)) return null;
+            const baseline = item.baseline_occupancy;
+            const spread = item.spread;
+            const independentDates = item.independent_dates;
+            const independentWeeks = item.independent_weeks;
+            if (!Number.isFinite(baseline) || baseline < 0 || !Number.isFinite(spread) || spread < 0
+              || !Number.isInteger(independentDates) || independentDates < 4
+              || !Number.isInteger(independentWeeks) || independentWeeks < 1) return null;
+            return { slot: item.slot, baseline, spread, independentDates, independentWeeks };
           });
           return items.some((item) => item === null) ? [] : items;
+        }
+
+        function renderQuietPlanner(insights) {
+          const list = $("quiet-list");
+          list.replaceChildren();
+          const details = validQuietDetails(insights).slice(0, 5);
+          if (!details.length) {
+            const progress = validRecommendationProgress(insights);
+            $("quiet-empty").hidden = false;
+            $("quiet-empty").textContent = progress
+              ? `Tracking: ${progress.matchingDates} / 4 matching weekday-time observations.`
+              : "Not enough evidence yet. A time window needs four independent local dates before it can be recommended.";
+            return;
+          }
+          $("quiet-empty").hidden = true;
+          details.forEach((detail, index) => {
+            const item = document.createElement("li");
+            const rank = document.createElement("span"); rank.className = "rank"; rank.textContent = String(index + 1).padStart(2, "0");
+            const window = document.createElement("span"); window.className = "window"; window.textContent = recommendationWindowLabel(detail.slot);
+            const evidence = document.createElement("small"); evidence.textContent = `${detail.independentDates} independent local dates · range ${detail.spread.toFixed(1)}`; window.append(evidence);
+            const number = document.createElement("span"); number.className = "median"; number.textContent = Number.isInteger(detail.baseline) ? String(detail.baseline) : detail.baseline.toFixed(1);
+            const numberLabel = document.createElement("small"); numberLabel.textContent = "typical"; number.append(numberLabel);
+            item.append(rank, window, number); list.append(item);
+          });
         }
 
         function isTimezoneAwareTimestamp(value) {
@@ -490,24 +494,93 @@
           }
         }
 
-        function renderClassAnnotations(insights) {
-          const schedule = validClassSchedule(insights);
-          const annotations = schedule ? validClassAnnotations(insights) : [];
-          if (!annotations.length) return;
-          $("class-empty").hidden = true;
-          const list = $("class-list");
-          annotations.forEach((annotation, index) => {
-            const item = document.createElement("li");
-            const rank = document.createElement("span"); rank.className = "rank"; rank.textContent = String(index + 1).padStart(2, "0");
-            const window = document.createElement("span"); window.className = "window"; window.textContent = annotation.className;
-            const details = document.createElement("small"); details.textContent = `${days[annotation.weekday]} · ${annotation.start}–${annotation.end} ET`; window.append(details);
-            const context = document.createElement("span"); context.className = "median"; context.textContent = "Schedule";
-            const contextLabel = document.createElement("small"); contextLabel.textContent = "annotation"; context.append(contextLabel);
-            item.append(rank, window, context); list.append(item);
+        function validMonthlyStability(insights, quietDetails) {
+          const stability = insights && insights.monthly_stability;
+          const validSlots = new Set((quietDetails || validQuietDetails(insights)).map((item) => item.slot));
+          if (!stability || typeof stability !== "object" || stability.status !== "ready" || !Array.isArray(stability.items) || !validSlots.size) return [];
+          const items = stability.items.map((item) => {
+            if (!item || typeof item !== "object" || !validSlots.has(item.slot)) return null;
+            const independentWeeks = item.independent_weeks;
+            const weekSpread = item.week_spread;
+            return Number.isInteger(independentWeeks) && independentWeeks >= 1 && Number.isFinite(weekSpread) && weekSpread >= 0
+              ? { slot: item.slot, independentWeeks, weekSpread }
+              : null;
           });
-          const sourceNote = $("class-source");
-          sourceNote.hidden = false;
+          return items.some((item) => item === null) ? [] : items;
+        }
+
+        function renderMonthlyStability(insights) {
+          const strip = $("stability-strip");
+          strip.replaceChildren();
+          const details = validQuietDetails(insights);
+          const items = validMonthlyStability(insights, details).slice(0, 5);
+          if (!items.length) {
+            $("stability-empty").hidden = false;
+            $("stability-empty").textContent = "Week-to-week stability appears after quiet windows qualify.";
+            return;
+          }
+          $("stability-empty").hidden = true;
+          items.forEach((item) => {
+            const row = document.createElement("div"); row.className = "stability-item";
+            const label = document.createElement("strong"); label.textContent = recommendationWindowLabel(item.slot);
+            const detail = document.createElement("span"); detail.textContent = `historical range ${item.weekSpread.toFixed(1)} · ${item.independentWeeks} independent local weeks`;
+            row.append(label, detail); strip.append(row);
+          });
+        }
+
+        function validFactorContext(insights) {
+          const context = insights && insights.factor_context;
+          if (!context || typeof context !== "object") return null;
+          const holidayDates = context.holiday_dates;
+          const nonHolidayDates = context.non_holiday_dates;
+          const scheduleStatus = context.class_schedule_status;
+          if (!Number.isInteger(holidayDates) || holidayDates < 0 || !Number.isInteger(nonHolidayDates) || nonHolidayDates < 0
+            || !["fresh", "stale", "unavailable"].includes(scheduleStatus)) return null;
+          const weather = validWeatherProgress({ weather_progress: context.weather_progress });
+          if (!weather) return null;
+          return { holidayDates, nonHolidayDates, scheduleStatus, weather };
+        }
+
+        function validObservedWeather(insights) {
+          const correlation = insights && insights.correlations;
+          if (!correlation || typeof correlation !== "object" || correlation.status !== "observed") return null;
+          const effect = correlation.effect;
+          if (!Number.isFinite(effect) || !Number.isInteger(correlation.condition_n) || correlation.condition_n < 20
+            || !Number.isInteger(correlation.comparison_n) || correlation.comparison_n < 20
+            || !Number.isFinite(correlation.confidence_low) || !Number.isFinite(correlation.confidence_high)
+            || !(correlation.confidence_low > 0 || correlation.confidence_high < 0)) return null;
+          return { effect };
+        }
+
+        function factorLine(target, label, copy) {
+          const strong = document.createElement("strong"); strong.textContent = label;
+          $(target).replaceChildren(strong, document.createTextNode(copy));
+        }
+
+        function renderFactors(insights) {
+          const context = validFactorContext(insights);
+          if (!context) {
+            factorLine("factor-weather", "Weather", "Validated context is unavailable.");
+            factorLine("factor-holidays", "Holidays", "Validated context is unavailable.");
+            factorLine("factor-schedule", "Schedule", "Validated context is unavailable.");
+            return;
+          }
+          const observed = validObservedWeather(insights);
+          const weather = context.weather;
+          const weatherCopy = observed
+            ? `Observed association, not proof: rainy dates were recorded ${Math.abs(observed.effect).toFixed(1)} ${observed.effect >= 0 ? "higher" : "lower"} after the time-slot baseline.`
+            : `Tracking: ${weather.rainyDates} rainy / 20 and ${weather.dryDates} dry / 20 independent dates.`;
+          factorLine("factor-weather", "Weather", weatherCopy);
+          factorLine("factor-holidays", "Holidays", `${context.holidayDates} holiday local date${context.holidayDates === 1 ? "" : "s"} / ${context.nonHolidayDates} non-holiday local date${context.nonHolidayDates === 1 ? "" : "s"} recorded.`);
+          factorLine("factor-schedule", "Schedule", `${context.scheduleStatus} public schedule metadata may matter as timing context.`);
+        }
+
+        function renderScheduleContext(insights) {
+          const schedule = validClassSchedule(insights);
+          const sourceNote = $("schedule-source");
           sourceNote.replaceChildren();
+          if (!schedule) { $("schedule-context").hidden = true; return; }
+          $("schedule-context").hidden = false;
           const link = document.createElement("a");
           link.href = schedule.source.href;
           link.textContent = "Public Crunch schedule";
@@ -518,34 +591,6 @@
             const attempt = schedule.lastAttemptAt ? ` Refresh failed ${fmt.format(schedule.lastAttemptAt)};` : " Schedule is stale;";
             sourceNote.append(document.createTextNode(`${attempt} retained schedule may be out of date.`));
           }
-        }
-
-        function renderWeather(insights) {
-          const correlation = insights.correlations;
-          const observed = correlation && typeof correlation === "object"
-            && correlation.status === "observed"
-            && typeof correlation.effect === "number" && Number.isFinite(correlation.effect)
-            && Number.isInteger(correlation.condition_n) && correlation.condition_n >= 20
-            && Number.isInteger(correlation.comparison_n) && correlation.comparison_n >= 20
-            && typeof correlation.confidence_low === "number" && Number.isFinite(correlation.confidence_low)
-            && typeof correlation.confidence_high === "number" && Number.isFinite(correlation.confidence_high)
-            && (correlation.confidence_low > 0 || correlation.confidence_high < 0);
-          if (!observed) {
-            const progress = validWeatherProgress(insights);
-            if (progress) {
-              $("weather-state").textContent = "Tracking";
-              $("weather-copy").textContent = `Tracking: ${progress.rainyDates} rainy / 20 and ${progress.dryDates} dry / 20 independent dates.`;
-            } else {
-              $("weather-state").textContent = "Weather unavailable";
-              $("weather-copy").textContent = "Weather evidence is unavailable or has not passed the required validation checks.";
-            }
-            return;
-          }
-          const effect = Number(correlation.effect);
-          $("weather-state").textContent = "Observed association";
-          $("weather-copy").replaceChildren();
-          const strong = document.createElement("strong"); strong.textContent = "Rain signal";
-          $("weather-copy").append(strong, document.createTextNode(` — Across the validated historical sample, rainy local dates were associated with ${Math.abs(effect).toFixed(1)} ${effect >= 0 ? "more" : "fewer"} people versus dry dates after the time-slot baseline. This is an observed association, not proof that rain caused the difference.`));
         }
 
         function validWeatherProgress(insights) {
@@ -562,10 +607,14 @@
             validClassSchedule,
             validRecommendationProgress,
             validWeatherProgress,
-            renderClassAnnotations,
-            renderQuietWindows,
+            validQuietDetails,
+            validMonthlyStability,
+            validFactorContext,
+            renderQuietPlanner,
+            renderMonthlyStability,
+            renderFactors,
+            renderScheduleContext,
             renderUnavailable,
-            renderWeather,
           });
         }
 
@@ -583,9 +632,10 @@
           renderChart(readings);
           const history = hourlyHistory(readings);
           renderHeatmap(history);
-          renderQuietWindows(insights);
-          renderClassAnnotations(insights);
-          renderWeather(insights);
+          renderQuietPlanner(insights);
+          renderMonthlyStability(insights);
+          renderFactors(insights);
+          renderScheduleContext(insights);
           $("announce").textContent = readings.length ? `Loaded ${readings.length} recorded crowd readings.` : "No valid crowd readings are available yet.";
         }
         init().catch(() => { $("announce").textContent = "The dashboard could not load its public data."; });
