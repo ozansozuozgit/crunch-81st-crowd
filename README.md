@@ -28,9 +28,9 @@ local opening hours, so closed periods produce no reading and no commit. GitHub
 does not promise that scheduled workflows run at the exact requested minute;
 individual readings use the actual fetch timestamp.
 
-The data set starts empty. No scheduled GitHub Action run has been observed
-yet, so the dashboard intentionally shows an empty-state until collection
-begins.
+The dashboard shows an explicit empty state only when no valid readings exist.
+Otherwise, it distinguishes measured data and insufficient evidence: a sparse
+history remains visible, but it does not become a recommendation.
 
 ## Data files
 

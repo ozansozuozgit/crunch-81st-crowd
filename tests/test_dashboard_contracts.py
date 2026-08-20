@@ -75,6 +75,8 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
             "historical range",
             "Observed association, not proof",
             "contextual annotations,\nnot causal explanations",
+            "explicit empty state only when no valid readings exist",
+            "measured data and insufficient evidence",
         ):
             self.assertIn(contract, self.readme)
 
