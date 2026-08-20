@@ -264,9 +264,11 @@ class MainTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             readings_path = Path(directory) / "readings.csv"
             insights_path = Path(directory) / "insights.json"
+            classes_path = Path(directory) / "classes.csv"
             readings_path.write_text("timestamp_utc,occupancy,status\n")
+            classes_path.write_text("weekday,start_local,end_local,class_name\n")
 
-            exit_code = main(readings_path, insights_path, fetch_json, "2026-08-17T12:00:00Z")
+            exit_code = main(readings_path, insights_path, fetch_json, "2026-08-17T12:00:00Z", classes_path)
 
             self.assertEqual(exit_code, 0)
             self.assertEqual(
