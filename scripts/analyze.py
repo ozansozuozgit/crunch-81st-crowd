@@ -165,10 +165,15 @@ def load_class_schedule_metadata(path: Path) -> dict[str, str]:
         return {"status": "unavailable"}
     try:
         parsed_url = urlparse(source_url)
-        datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
+        fetched_datetime = datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
     except ValueError:
         return {"status": "unavailable"}
-    if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+    if (
+        parsed_url.scheme not in {"http", "https"}
+        or not parsed_url.netloc
+        or fetched_datetime.tzinfo is None
+        or fetched_datetime.utcoffset() is None
+    ):
         return {"status": "unavailable"}
     return {"status": status, "source_url": source_url, "fetched_at": fetched_at}
 

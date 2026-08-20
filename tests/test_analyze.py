@@ -128,6 +128,21 @@ class ClassScheduleTests(unittest.TestCase):
 
             self.assertEqual(load_class_schedule_metadata(path), {"status": "unavailable"})
 
+    def test_naive_schedule_metadata_timestamp_is_unavailable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "classes_meta.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "status": "fresh",
+                        "source_url": "https://class-prod.crunch.com/week_schedule.pdf?club_id=40",
+                        "fetched_at": "2026-08-20T08:48:33",
+                    }
+                )
+            )
+
+            self.assertEqual(load_class_schedule_metadata(path), {"status": "unavailable"})
+
 
 class RecommendationTests(unittest.TestCase):
     def test_reports_maximum_independent_dates_for_an_exact_slot(self):
