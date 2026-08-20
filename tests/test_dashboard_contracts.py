@@ -12,7 +12,9 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
 
     def test_quiet_workout_regions_keep_the_page_compact(self):
         for contract in (
-            'id="today-heading">Today\'s recorded rhythm',
+            'id="last24-heading">Last 24 recorded hours',
+            'Recorded occupancy over the last 24 hours',
+            "function chartRangeLabel(start, end)",
             'id="quiet-heading">Best quiet workout windows',
             'id="pattern-heading">Week / hour pattern',
             'id="factors-heading">What may matter',
@@ -57,6 +59,7 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
             "Tracking: ${progress.matchingDates} / 4 matching weekday-time observations.",
             "Tracking: ${weather.rainyDates} rainy / 20 and ${weather.dryDates} dry / 20 independent dates.",
             "retained schedule may be out of date",
+            "Weather context is unavailable; no weather comparison is shown.",
         ):
             self.assertIn(contract, self.page)
 

@@ -133,12 +133,12 @@
         </div>
       </section>
 
-      <section aria-labelledby="today-heading">
-        <div class="section-heading"><h2 id="today-heading">Today's recorded rhythm</h2><p id="chart-period">Awaiting readings</p></div>
+      <section aria-labelledby="last24-heading">
+        <div class="section-heading"><h2 id="last24-heading">Last 24 recorded hours</h2><p id="chart-period">Awaiting readings</p></div>
         <div class="paper chart-wrap" id="chart-region">
           <p class="chart-empty" id="chart-empty">No readings have been collected in the last 24 hours.</p>
           <svg id="occupancy-chart" viewBox="0 0 920 310" role="img" aria-labelledby="chart-title chart-desc" hidden>
-            <title id="chart-title">Occupancy readings over the last 24 hours</title>
+            <title id="chart-title">Recorded occupancy over the last 24 hours</title>
             <desc id="chart-desc">No recorded readings available.</desc>
           </svg>
           <p class="chart-caption" id="chart-caption">Every point is a recorded public Crunch occupancy value. Missing time is left missing, not estimated.</p>
@@ -316,6 +316,10 @@
           return node;
         }
 
+        function chartRangeLabel(start, end) {
+          return `${fmt.format(start)} — ${fmt.format(end)}`;
+        }
+
         function renderChart(readings) {
           const cutoff = Date.now() - 24 * 60 * 60 * 1000;
           const data = readings.filter((reading) => reading.date.getTime() >= cutoff);
@@ -324,7 +328,7 @@
           const chart = $("occupancy-chart");
           chart.hidden = false;
           chart.replaceChildren(svgEl("title", { id: "chart-title" }), svgEl("desc", { id: "chart-desc" }));
-          chart.querySelector("title").textContent = "Recorded occupancy over the past 24 hours";
+          chart.querySelector("title").textContent = "Recorded occupancy over the last 24 hours";
           const values = data.map((point) => point.occupancy);
           const min = Math.min(...values);
           const max = Math.max(...values);
@@ -363,7 +367,7 @@
             label.textContent = shortTimeFmt.format(date);
             chart.append(label);
           });
-          $("chart-period").textContent = `${fmt.format(data[0].date)} — ${fmt.format(data.at(-1).date)}`;
+          $("chart-period").textContent = chartRangeLabel(data[0].date, data.at(-1).date);
           $("chart-caption").textContent = `${desc} Every point is a recorded public Crunch occupancy value; missing time is not estimated.`;
         }
 
@@ -567,9 +571,11 @@
           }
           const observed = validObservedWeather(insights);
           const weather = context.weather;
-          const weatherCopy = observed
-            ? `Observed association, not proof: rainy dates were recorded ${Math.abs(observed.effect).toFixed(1)} ${observed.effect >= 0 ? "higher" : "lower"} after the time-slot baseline.`
-            : `Tracking: ${weather.rainyDates} rainy / 20 and ${weather.dryDates} dry / 20 independent dates.`;
+          const weatherCopy = weather.status === "unavailable"
+            ? "Weather context is unavailable; no weather comparison is shown."
+            : observed
+              ? `Observed association, not proof: rainy dates were recorded ${Math.abs(observed.effect).toFixed(1)} ${observed.effect >= 0 ? "higher" : "lower"} after the time-slot baseline.`
+              : `Tracking: ${weather.rainyDates} rainy / 20 and ${weather.dryDates} dry / 20 independent dates.`;
           factorLine("factor-weather", "Weather", weatherCopy);
           factorLine("factor-holidays", "Holidays", `${context.holidayDates} holiday local date${context.holidayDates === 1 ? "" : "s"} / ${context.nonHolidayDates} non-holiday local date${context.nonHolidayDates === 1 ? "" : "s"} recorded.`);
           factorLine("factor-schedule", "Schedule", `${context.scheduleStatus} public schedule metadata may matter as timing context.`);
@@ -595,16 +601,17 @@
 
         function validWeatherProgress(insights) {
           const progress = insights && insights.weather_progress;
-          if (!progress || typeof progress !== "object" || !["collecting", "eligible"].includes(progress.status)) return null;
+          if (!progress || typeof progress !== "object" || !["collecting", "eligible", "unavailable"].includes(progress.status)) return null;
           const rainyDates = progress.rainy_dates;
           const dryDates = progress.dry_dates;
           if (!Number.isInteger(rainyDates) || rainyDates < 0 || !Number.isInteger(dryDates) || dryDates < 0 || progress.required_dates_per_group !== 20) return null;
-          return { rainyDates, dryDates };
+          return { status: progress.status, rainyDates, dryDates };
         }
 
         if (globalThis.__CROWD_DESK_TEST_HOOKS__) {
           Object.assign(globalThis.__CROWD_DESK_TEST_HOOKS__, {
             validClassSchedule,
+            chartRangeLabel,
             validRecommendationProgress,
             validWeatherProgress,
             validQuietDetails,

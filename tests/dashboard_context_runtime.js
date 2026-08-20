@@ -34,6 +34,10 @@ const context = {
 context.globalThis = context;
 vm.runInNewContext(script, context);
 
+const overnightRange = hooks.chartRangeLabel(new Date("2026-08-20T03:30:00Z"), new Date("2026-08-20T05:30:00Z"));
+assert.match(overnightRange, /Wed, Aug 19/);
+assert.match(overnightRange, /Thu, Aug 20/);
+
 const readyInsights = {
   quiet_window_details: { status: "ready", items: [{ slot: "0-18:00", baseline_occupancy: 25, independent_dates: 4, independent_weeks: 2, spread: 10 }] },
   monthly_stability: { status: "ready", items: [{ slot: "0-18:00", independent_weeks: 2, week_spread: 8 }] },
@@ -69,6 +73,20 @@ hooks.renderFactors(readyInsights);
 assert.match(elements.get("factor-weather").textContent, /2 rainy \/ 20/);
 assert.match(elements.get("factor-holidays").textContent, /1 holiday local date/);
 assert.match(elements.get("factor-schedule").textContent, /fresh/);
+
+const weatherUnavailable = {
+  ...readyInsights,
+  factor_context: {
+    ...readyInsights.factor_context,
+    weather_progress: { status: "unavailable", rainy_dates: 0, dry_dates: 0, required_dates_per_group: 20 },
+    class_schedule_status: "stale",
+  },
+};
+assert.equal(hooks.validFactorContext(weatherUnavailable).weather.status, "unavailable");
+hooks.renderFactors(weatherUnavailable);
+assert.match(elements.get("factor-weather").textContent, /Weather context is unavailable/);
+assert.match(elements.get("factor-holidays").textContent, /1 holiday local date/);
+assert.match(elements.get("factor-schedule").textContent, /stale/);
 
 hooks.renderScheduleContext(readyInsights);
 assert.equal(elements.get("schedule-context").hidden, false);
