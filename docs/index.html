@@ -160,6 +160,7 @@
         <div class="paper">
           <ul class="quiet-list" id="class-list" aria-describedby="class-note"></ul>
           <p class="empty-note" id="class-empty">No class-time annotations are published yet.</p>
+          <p class="data-note" id="class-source" hidden></p>
           <p class="weather-copy" id="class-note"><strong>Context only</strong> — Published class times can coincide with traffic, but they do not demonstrate that a class caused a crowd change.</p>
         </div>
       </section>
@@ -281,11 +282,17 @@
           $("chart-empty").textContent = "Data unavailable. The public readings file could not be loaded or validated; refresh this page to retry.";
           $("chart-caption").textContent = "No crowd chart is displayed because the public readings file is unavailable.";
           $("heatmap-empty").textContent = "Data unavailable. Refresh this page to retry loading the public readings file.";
+          $("heatmap").replaceChildren();
+          $("quiet-list").replaceChildren();
           $("quiet-empty").textContent = "Data unavailable. Refresh this page to retry loading the public readings file.";
           $("class-list").replaceChildren();
           $("class-empty").hidden = false;
           $("class-empty").textContent = "Data unavailable. Refresh this page to retry loading the public readings file before relying on class-time annotations.";
+          $("class-source").replaceChildren();
+          $("class-source").hidden = true;
           $("class-note").replaceChildren("Class-time annotations are not displayed while the public readings file is unavailable.");
+          $("weather-state").textContent = "Data unavailable";
+          $("weather-copy").textContent = "Weather evidence is unavailable while the public readings file is unavailable.";
           $("updated-at").textContent = "Data status: unavailable";
         }
 
@@ -414,7 +421,13 @@
 
         function renderQuietWindows(insights) {
           const recommendations = validRecommendations(insights);
-          if (!recommendations.length) return;
+          if (!recommendations.length) {
+            const progress = validRecommendationProgress(insights);
+            $("quiet-empty").textContent = progress
+              ? `Tracking: ${progress.matchingDates} / 4 matching weekday-time observations.`
+              : "Not enough evidence yet. A time window needs four independent local dates before it can be recommended.";
+            return;
+          }
           $("quiet-empty").hidden = true;
           const list = $("quiet-list");
           recommendations.forEach((recommendation, index) => {
@@ -426,6 +439,15 @@
             const numberLabel = document.createElement("small"); numberLabel.textContent = "typical"; number.append(numberLabel);
             item.append(rank, window, number); list.append(item);
           });
+        }
+
+        function validRecommendationProgress(insights) {
+          const progress = insights && insights.recommendation_progress;
+          if (!progress || typeof progress !== "object" || progress.status !== "collecting") return null;
+          const matchingDates = progress.matching_dates;
+          const requiredDates = progress.required_dates;
+          if (!Number.isInteger(matchingDates) || matchingDates < 0 || matchingDates >= 4 || requiredDates !== 4) return null;
+          return { matchingDates };
         }
 
         function validClassAnnotations(insights) {
@@ -444,8 +466,27 @@
           return items.some((item) => item === null) ? [] : items;
         }
 
+        function isTimezoneAwareTimestamp(value) {
+          if (typeof value !== "string" || !/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return false;
+          return Boolean(safeDate(value));
+        }
+
+        function validClassSchedule(insights) {
+          const schedule = insights && insights.class_schedule;
+          if (!schedule || typeof schedule !== "object" || !["fresh", "stale"].includes(schedule.status)) return null;
+          if (typeof schedule.source_url !== "string" || !isTimezoneAwareTimestamp(schedule.fetched_at)) return null;
+          try {
+            const source = new URL(schedule.source_url);
+            if (source.protocol !== "https:" || source.username || source.password || source.hostname !== "class-prod.crunch.com") return null;
+            return { status: schedule.status, source, fetchedAt: safeDate(schedule.fetched_at) };
+          } catch (_) {
+            return null;
+          }
+        }
+
         function renderClassAnnotations(insights) {
-          const annotations = validClassAnnotations(insights);
+          const schedule = validClassSchedule(insights);
+          const annotations = schedule ? validClassAnnotations(insights) : [];
           if (!annotations.length) return;
           $("class-empty").hidden = true;
           const list = $("class-list");
@@ -458,17 +499,67 @@
             const contextLabel = document.createElement("small"); contextLabel.textContent = "annotation"; context.append(contextLabel);
             item.append(rank, window, context); list.append(item);
           });
+          const sourceNote = $("class-source");
+          sourceNote.hidden = false;
+          sourceNote.replaceChildren();
+          const link = document.createElement("a");
+          link.href = schedule.source.href;
+          link.textContent = "Public Crunch schedule";
+          link.rel = "noreferrer";
+          link.target = "_blank";
+          sourceNote.append("Source: ", link, document.createTextNode(` · last verified ${fmt.format(schedule.fetchedAt)}`));
+          if (schedule.status === "stale") {
+            sourceNote.append(document.createTextNode(" · This retained schedule may be out of date."));
+          }
         }
 
         function renderWeather(insights) {
           const correlation = insights.correlations;
-          const observed = correlation && correlation.status === "observed" && Number.isFinite(Number(correlation.effect)) && Number(correlation.condition_n) >= 20 && Number(correlation.comparison_n) >= 20;
-          if (!observed) return;
+          const observed = correlation && typeof correlation === "object"
+            && correlation.status === "observed"
+            && typeof correlation.effect === "number" && Number.isFinite(correlation.effect)
+            && Number.isInteger(correlation.condition_n) && correlation.condition_n >= 20
+            && Number.isInteger(correlation.comparison_n) && correlation.comparison_n >= 20
+            && typeof correlation.confidence_low === "number" && Number.isFinite(correlation.confidence_low)
+            && typeof correlation.confidence_high === "number" && Number.isFinite(correlation.confidence_high)
+            && (correlation.confidence_low > 0 || correlation.confidence_high < 0);
+          if (!observed) {
+            const progress = validWeatherProgress(insights);
+            if (progress) {
+              $("weather-state").textContent = "Tracking";
+              $("weather-copy").textContent = `Tracking: ${progress.rainyDates} rainy / 20 and ${progress.dryDates} dry / 20 independent dates.`;
+            } else {
+              $("weather-state").textContent = "Weather unavailable";
+              $("weather-copy").textContent = "Weather evidence is unavailable or has not passed the required validation checks.";
+            }
+            return;
+          }
           const effect = Number(correlation.effect);
           $("weather-state").textContent = "Observed association";
           $("weather-copy").replaceChildren();
           const strong = document.createElement("strong"); strong.textContent = "Rain signal";
           $("weather-copy").append(strong, document.createTextNode(` — Across the validated historical sample, rainy local dates were associated with ${Math.abs(effect).toFixed(1)} ${effect >= 0 ? "more" : "fewer"} people versus dry dates after the time-slot baseline. This is an observed association, not proof that rain caused the difference.`));
+        }
+
+        function validWeatherProgress(insights) {
+          const progress = insights && insights.weather_progress;
+          if (!progress || typeof progress !== "object" || !["collecting", "eligible"].includes(progress.status)) return null;
+          const rainyDates = progress.rainy_dates;
+          const dryDates = progress.dry_dates;
+          if (!Number.isInteger(rainyDates) || rainyDates < 0 || !Number.isInteger(dryDates) || dryDates < 0 || progress.required_dates_per_group !== 20) return null;
+          return { rainyDates, dryDates };
+        }
+
+        if (globalThis.__CROWD_DESK_TEST_HOOKS__) {
+          Object.assign(globalThis.__CROWD_DESK_TEST_HOOKS__, {
+            validClassSchedule,
+            validRecommendationProgress,
+            validWeatherProgress,
+            renderClassAnnotations,
+            renderQuietWindows,
+            renderUnavailable,
+            renderWeather,
+          });
         }
 
         async function init() {

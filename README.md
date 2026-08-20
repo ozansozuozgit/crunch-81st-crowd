@@ -31,29 +31,42 @@ begins.
   numeric count), and `status` (Crunch's public occupancy label).
 - [`docs/data/insights.json`](docs/data/insights.json) is regenerated daily.
   It contains the latest observation, local weekday/time-slot baselines,
-  recommendations, and evidence-gated weather associations.
-- [`docs/data/classes.csv`](docs/data/classes.csv) is a manually maintained
-  optional class-time reference with `weekday`, `start_local`, `end_local`, and
-  `class_name`.
+  recommendations, class-schedule state, and evidence-gated weather
+  associations.
+- [`docs/data/classes.csv`](docs/data/classes.csv) is automatically refreshed
+  from Crunch's public [E 81st weekly schedule PDF](https://class-prod.crunch.com/week_schedule.pdf?button_location=web&club_id=40&options=group).
+  It contains validated `weekday`, `start_local`, `end_local`, and `class_name`
+  annotation rows.
+- [`docs/data/classes_meta.json`](docs/data/classes_meta.json) records the
+  official source and the last verified fetch time. If Crunch's PDF is
+  temporarily unavailable or cannot be validated, the last known valid schedule
+  is retained and explicitly marked **stale** in the dashboard rather than
+  silently removed or presented as current.
 
-Weather is examined only as an observed association after the analyzer has
-enough independent local dates in both rainy and dry groups. Correlation is not
-causation, and the dashboard must not present weather as the reason attendance
-changed.
+The dashboard shows collection progress but does not lower its evidence
+thresholds: a quiet time needs **four independent local dates for the same
+weekday/time slot**, and weather requires **20 independent rainy and 20
+independent dry local dates** before an observed association can be described.
+Correlation is not causation, and the dashboard must not present weather or a
+class as the reason attendance changed.
 
 ## Run locally
 
-Python 3.12 or later is sufficient; there are no package dependencies.
+Python 3.12 or later is sufficient. The automatic schedule parser uses the
+pinned dependency in `requirements.txt`.
 
 ```sh
+python -m pip install --requirement requirements.txt
 python scripts/collector.py
+python scripts/sync_classes.py
 python scripts/analyze.py
 python -m unittest discover -v
 ```
 
 On systems where `python` is not aliased to Python 3, replace it with
-`python3`. The collector only writes during scheduled open hours; tests use
-fixtures and do not need a Crunch login.
+`python3`. The collector only writes during scheduled open hours; schedule
+refreshes use only the public Crunch PDF, and tests use fixtures without a
+Crunch login.
 
 ## Publish the dashboard
 
