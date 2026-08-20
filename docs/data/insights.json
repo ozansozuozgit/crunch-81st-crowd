@@ -375,6 +375,54 @@
     "3-05:00": {
       "median": 0,
       "n": 1
+    },
+    "3-05:40": {
+      "median": 16,
+      "n": 1
+    },
+    "3-06:10": {
+      "median": 32,
+      "n": 1
+    },
+    "3-06:40": {
+      "median": 75,
+      "n": 1
+    },
+    "3-07:10": {
+      "median": 86,
+      "n": 1
+    },
+    "3-07:40": {
+      "median": 137,
+      "n": 1
+    },
+    "3-08:10": {
+      "median": 151,
+      "n": 1
+    },
+    "3-09:10": {
+      "median": 217,
+      "n": 1
+    },
+    "3-10:00": {
+      "median": 249,
+      "n": 1
+    },
+    "3-10:40": {
+      "median": 302,
+      "n": 1
+    },
+    "3-11:20": {
+      "median": 314,
+      "n": 1
+    },
+    "3-11:50": {
+      "median": 341,
+      "n": 1
+    },
+    "3-12:20": {
+      "median": 349,
+      "n": 1
     }
   },
   "class_annotations": {
@@ -689,7 +737,7 @@
     "status": "available"
   },
   "class_schedule": {
-    "fetched_at": "2026-08-20T09:10:05.537609Z",
+    "fetched_at": "2026-08-20T16:52:20.883765Z",
     "source_url": "https://class-prod.crunch.com/week_schedule.pdf?button_location=web&club_id=40&options=group",
     "status": "fresh"
   },
@@ -707,14 +755,14 @@
       "status": "collecting"
     }
   },
-  "generated_at": "2026-08-20T19:30:12.921185+03:00",
+  "generated_at": "2026-08-20T16:52:21.586547+00:00",
   "latest": {
     "holiday": false,
     "holiday_label": null,
-    "local": "2026-08-20T05:01:42-04:00",
-    "occupancy": 0,
-    "status": "light",
-    "timestamp_utc": "2026-08-20T09:01:42Z"
+    "local": "2026-08-20T12:26:26-04:00",
+    "occupancy": 349,
+    "status": "moderate",
+    "timestamp_utc": "2026-08-20T16:26:26Z"
   },
   "monthly_stability": {
     "items": [],
