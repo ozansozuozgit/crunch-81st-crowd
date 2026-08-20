@@ -359,24 +359,359 @@
     "2-19:30": {
       "median": 835,
       "n": 1
+    },
+    "2-19:50": {
+      "median": 852,
+      "n": 1
+    },
+    "2-20:20": {
+      "median": 886,
+      "n": 1
+    },
+    "2-22:00": {
+      "median": 953,
+      "n": 1
     }
   },
   "class_annotations": {
-    "items": [],
-    "status": "empty"
+    "items": [
+      {
+        "class_name": "Chisel",
+        "end_local": "08:15",
+        "start_local": "07:30",
+        "weekday": 0
+      },
+      {
+        "class_name": "Ripped Ride",
+        "end_local": "09:15",
+        "start_local": "08:30",
+        "weekday": 0
+      },
+      {
+        "class_name": "Strength and Alignment",
+        "end_local": "13:15",
+        "start_local": "12:30",
+        "weekday": 0
+      },
+      {
+        "class_name": "Vinyasa Yoga",
+        "end_local": "18:00",
+        "start_local": "17:00",
+        "weekday": 0
+      },
+      {
+        "class_name": "Shredded",
+        "end_local": "18:15",
+        "start_local": "17:30",
+        "weekday": 0
+      },
+      {
+        "class_name": "Bliss Yoga",
+        "end_local": "19:15",
+        "start_local": "18:15",
+        "weekday": 0
+      },
+      {
+        "class_name": "Mash-Up: Zumba\u00ae vs Hard Knocks",
+        "end_local": "19:00",
+        "start_local": "18:15",
+        "weekday": 0
+      },
+      {
+        "class_name": "Barre Bootcamp",
+        "end_local": "19:45",
+        "start_local": "19:00",
+        "weekday": 0
+      },
+      {
+        "class_name": "Mash-Up: Pilates vs Core Yoga",
+        "end_local": "20:30",
+        "start_local": "19:45",
+        "weekday": 0
+      },
+      {
+        "class_name": "Party Ride",
+        "end_local": "07:15",
+        "start_local": "06:30",
+        "weekday": 1
+      },
+      {
+        "class_name": "Pilates Mat",
+        "end_local": "08:15",
+        "start_local": "07:30",
+        "weekday": 1
+      },
+      {
+        "class_name": "Vinyasa Yoga",
+        "end_local": "09:15",
+        "start_local": "08:30",
+        "weekday": 1
+      },
+      {
+        "class_name": "Good Vibrations",
+        "end_local": "09:45",
+        "start_local": "09:15",
+        "weekday": 1
+      },
+      {
+        "class_name": "Weigh Hard Cardio",
+        "end_local": "10:15",
+        "start_local": "09:30",
+        "weekday": 1
+      },
+      {
+        "class_name": "Chisel",
+        "end_local": "11:00",
+        "start_local": "10:15",
+        "weekday": 1
+      },
+      {
+        "class_name": "Tabura",
+        "end_local": "18:15",
+        "start_local": "17:30",
+        "weekday": 1
+      },
+      {
+        "class_name": "Vinyasa Yoga",
+        "end_local": "19:00",
+        "start_local": "18:00",
+        "weekday": 1
+      },
+      {
+        "class_name": "The Vicious Cycle",
+        "end_local": "19:15",
+        "start_local": "18:30",
+        "weekday": 1
+      },
+      {
+        "class_name": "Core Strength & Alignment",
+        "end_local": "20:00",
+        "start_local": "19:15",
+        "weekday": 1
+      },
+      {
+        "class_name": "Ass & Abs",
+        "end_local": "07:15",
+        "start_local": "06:30",
+        "weekday": 2
+      },
+      {
+        "class_name": "Top it Off",
+        "end_local": "08:15",
+        "start_local": "07:30",
+        "weekday": 2
+      },
+      {
+        "class_name": "Buff Yoga",
+        "end_local": "13:15",
+        "start_local": "12:30",
+        "weekday": 2
+      },
+      {
+        "class_name": "Core Yoga",
+        "end_local": "18:00",
+        "start_local": "17:00",
+        "weekday": 2
+      },
+      {
+        "class_name": "The Ride",
+        "end_local": "18:15",
+        "start_local": "17:30",
+        "weekday": 2
+      },
+      {
+        "class_name": "Vinyasa Yoga",
+        "end_local": "19:00",
+        "start_local": "18:30",
+        "weekday": 2
+      },
+      {
+        "class_name": "Cardio Kickboxing",
+        "end_local": "19:45",
+        "start_local": "19:00",
+        "weekday": 2
+      },
+      {
+        "class_name": "HALFSIES: Ride + Absolution",
+        "end_local": "07:15",
+        "start_local": "06:30",
+        "weekday": 3
+      },
+      {
+        "class_name": "Diesel",
+        "end_local": "08:15",
+        "start_local": "07:30",
+        "weekday": 3
+      },
+      {
+        "class_name": "Chisel",
+        "end_local": "09:15",
+        "start_local": "08:30",
+        "weekday": 3
+      },
+      {
+        "class_name": "Top it Off",
+        "end_local": "10:15",
+        "start_local": "09:30",
+        "weekday": 3
+      },
+      {
+        "class_name": "Core Yoga",
+        "end_local": "11:15",
+        "start_local": "10:15",
+        "weekday": 3
+      },
+      {
+        "class_name": "Weigh Hard Cardio",
+        "end_local": "18:15",
+        "start_local": "17:30",
+        "weekday": 3
+      },
+      {
+        "class_name": "Bliss Yoga",
+        "end_local": "19:00",
+        "start_local": "18:00",
+        "weekday": 3
+      },
+      {
+        "class_name": "Core Strength & Alignment",
+        "end_local": "19:15",
+        "start_local": "18:30",
+        "weekday": 3
+      },
+      {
+        "class_name": "Buff Yoga",
+        "end_local": "20:00",
+        "start_local": "19:15",
+        "weekday": 3
+      },
+      {
+        "class_name": "Weigh Hard Cardio",
+        "end_local": "08:15",
+        "start_local": "07:30",
+        "weekday": 4
+      },
+      {
+        "class_name": "Pilates Mat",
+        "end_local": "09:45",
+        "start_local": "09:00",
+        "weekday": 4
+      },
+      {
+        "class_name": "B.L.T. Butt, Legs & Thighs",
+        "end_local": "10:45",
+        "start_local": "10:00",
+        "weekday": 4
+      },
+      {
+        "class_name": "Pilates Sculpt",
+        "end_local": "13:15",
+        "start_local": "12:30",
+        "weekday": 4
+      },
+      {
+        "class_name": "Vinyasa Yoga",
+        "end_local": "18:00",
+        "start_local": "17:00",
+        "weekday": 4
+      },
+      {
+        "class_name": "Party Ride",
+        "end_local": "19:15",
+        "start_local": "18:30",
+        "weekday": 4
+      },
+      {
+        "class_name": "Weigh Hard Cardio",
+        "end_local": "09:45",
+        "start_local": "09:00",
+        "weekday": 5
+      },
+      {
+        "class_name": "Chisel",
+        "end_local": "10:45",
+        "start_local": "10:00",
+        "weekday": 5
+      },
+      {
+        "class_name": "Pulse Pilates",
+        "end_local": "11:45",
+        "start_local": "11:00",
+        "weekday": 5
+      },
+      {
+        "class_name": "Chakra Vinyasa Flow",
+        "end_local": "14:30",
+        "start_local": "13:30",
+        "weekday": 5
+      },
+      {
+        "class_name": "Pilates Mat",
+        "end_local": "09:45",
+        "start_local": "09:00",
+        "weekday": 6
+      },
+      {
+        "class_name": "Bliss Yoga",
+        "end_local": "11:00",
+        "start_local": "10:00",
+        "weekday": 6
+      },
+      {
+        "class_name": "Pilates Sculpt",
+        "end_local": "11:45",
+        "start_local": "11:00",
+        "weekday": 6
+      },
+      {
+        "class_name": "Party Ride",
+        "end_local": "12:45",
+        "start_local": "12:00",
+        "weekday": 6
+      },
+      {
+        "class_name": "B.L.T. Butt, Legs & Thighs",
+        "end_local": "13:30",
+        "start_local": "13:00",
+        "weekday": 6
+      },
+      {
+        "class_name": "Mash-Up: Zumba\u00ae vs Hard Knocks",
+        "end_local": "17:30",
+        "start_local": "16:30",
+        "weekday": 6
+      }
+    ],
+    "status": "available"
+  },
+  "class_schedule": {
+    "fetched_at": "2026-08-20T08:48:33.019794Z",
+    "source_url": "https://class-prod.crunch.com/week_schedule.pdf?button_location=web&club_id=40&options=group",
+    "status": "fresh"
   },
   "correlations": {
     "status": "insufficient_data"
   },
-  "generated_at": "2026-08-19T23:43:07.596342+00:00",
+  "generated_at": "2026-08-20T11:54:04.912931+03:00",
   "latest": {
     "holiday": false,
     "holiday_label": null,
-    "local": "2026-08-19T19:32:30-04:00",
-    "occupancy": 835,
+    "local": "2026-08-19T22:03:35-04:00",
+    "occupancy": 953,
     "status": "active",
-    "timestamp_utc": "2026-08-19T23:32:30Z"
+    "timestamp_utc": "2026-08-20T02:03:35Z"
+  },
+  "recommendation_progress": {
+    "matching_dates": 1,
+    "required_dates": 4,
+    "status": "collecting"
   },
   "recommendations": [],
-  "recommendations_status": "insufficient_data"
+  "recommendations_status": "insufficient_data",
+  "weather_progress": {
+    "dry_dates": 1,
+    "rainy_dates": 0,
+    "required_dates_per_group": 20,
+    "status": "collecting"
+  }
 }

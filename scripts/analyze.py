@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 from math import sqrt
 from pathlib import Path
 from statistics import fmean, median, variance
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
@@ -23,7 +23,10 @@ NEW_YORK = ZoneInfo("America/New_York")
 DEFAULT_READINGS_PATH = Path(__file__).resolve().parents[1] / "docs" / "data" / "readings.csv"
 DEFAULT_INSIGHTS_PATH = Path(__file__).resolve().parents[1] / "docs" / "data" / "insights.json"
 DEFAULT_CLASSES_PATH = Path(__file__).resolve().parents[1] / "docs" / "data" / "classes.csv"
+DEFAULT_CLASSES_META_PATH = Path(__file__).resolve().parents[1] / "docs" / "data" / "classes_meta.json"
 CLASS_FIELDS = ("weekday", "start_local", "end_local", "class_name")
+WEATHER_REQUIRED_DATES_PER_GROUP = 20
+RECOMMENDATION_REQUIRED_DATES = 4
 
 
 def slot_key(local_iso: str) -> str:
@@ -145,6 +148,31 @@ def load_class_schedule(path: Path) -> dict[str, list[dict] | str]:
     return {"status": "partial" if invalid_rows else "available", "items": items}
 
 
+def load_class_schedule_metadata(path: Path) -> dict[str, str]:
+    try:
+        metadata = json.loads(Path(path).read_text())
+        status = metadata["status"]
+        source_url = metadata["source_url"]
+        fetched_at = metadata["fetched_at"]
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return {"status": "unavailable"}
+
+    if (
+        status not in {"fresh", "stale"}
+        or not isinstance(source_url, str)
+        or not isinstance(fetched_at, str)
+    ):
+        return {"status": "unavailable"}
+    try:
+        parsed_url = urlparse(source_url)
+        datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
+    except ValueError:
+        return {"status": "unavailable"}
+    if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+        return {"status": "unavailable"}
+    return {"status": status, "source_url": source_url, "fetched_at": fetched_at}
+
+
 def quiet_window_recommendations(readings: list[dict]) -> dict[str, list[dict] | str]:
     occupancies_by_slot_and_date: dict[str, dict[str, list[int | float]]] = {}
     for reading in readings:
@@ -159,7 +187,7 @@ def quiet_window_recommendations(readings: list[dict]) -> dict[str, list[dict] |
         # A day contributes one averaged observation, regardless of how many
         # adjacent collection intervals landed in the same ten-minute slot.
         daily_occupancies = [fmean(values) for values in occupancies_by_date.values()]
-        if len(daily_occupancies) < 4:
+        if len(daily_occupancies) < RECOMMENDATION_REQUIRED_DATES:
             continue
         candidates.append(
             {
@@ -174,6 +202,20 @@ def quiet_window_recommendations(readings: list[dict]) -> dict[str, list[dict] |
     return {
         "status": "ready",
         "items": sorted(candidates, key=lambda candidate: (candidate["baseline_occupancy"], candidate["slot"]))[:5],
+    }
+
+
+def recommendation_progress(readings: list[dict]) -> dict[str, int | str]:
+    dates_by_slot: dict[str, set[str]] = {}
+    for reading in readings:
+        local = datetime.fromisoformat(reading["local"])
+        dates_by_slot.setdefault(slot_key(reading["local"]), set()).add(local.date().isoformat())
+
+    matching_dates = max((len(dates) for dates in dates_by_slot.values()), default=0)
+    return {
+        "matching_dates": matching_dates,
+        "required_dates": RECOMMENDATION_REQUIRED_DATES,
+        "status": "ready" if matching_dates >= RECOMMENDATION_REQUIRED_DATES else "collecting",
     }
 
 
@@ -201,6 +243,24 @@ def association(rows: list[dict], field: str, value: bool) -> dict[str, int | fl
 
 
 def weather_association(rows: list[dict]) -> dict[str, int | float | str]:
+    return association(_weather_independent_dates(rows), "rain", True)
+
+
+def weather_progress(rows: list[dict]) -> dict[str, int | str]:
+    independent_dates = _weather_independent_dates(rows)
+    rainy_dates = sum(row["rain"] for row in independent_dates)
+    dry_dates = len(independent_dates) - rainy_dates
+    return {
+        "rainy_dates": rainy_dates,
+        "dry_dates": dry_dates,
+        "required_dates_per_group": WEATHER_REQUIRED_DATES_PER_GROUP,
+        "status": "eligible"
+        if rainy_dates >= WEATHER_REQUIRED_DATES_PER_GROUP and dry_dates >= WEATHER_REQUIRED_DATES_PER_GROUP
+        else "collecting",
+    }
+
+
+def _weather_independent_dates(rows: list[dict]) -> list[dict]:
     by_local_date: dict[str, list[dict]] = {}
     for row in rows:
         local_date = datetime.fromisoformat(row["local"]).date().isoformat()
@@ -220,7 +280,7 @@ def weather_association(rows: list[dict]) -> dict[str, int | float | str]:
                 "rain": conditions.pop(),
             }
         )
-    return association(independent_dates, "rain", True)
+    return independent_dates
 
 
 def load_weather(readings: list[dict], fetch_json) -> dict[str, dict[str, int | float | bool]]:
@@ -260,8 +320,20 @@ def empty_insights() -> dict:
         "baselines": {},
         "recommendations": [],
         "recommendations_status": "insufficient_data",
+        "recommendation_progress": {
+            "matching_dates": 0,
+            "required_dates": RECOMMENDATION_REQUIRED_DATES,
+            "status": "collecting",
+        },
         "correlations": {"status": "insufficient_data"},
+        "weather_progress": {
+            "rainy_dates": 0,
+            "dry_dates": 0,
+            "required_dates_per_group": WEATHER_REQUIRED_DATES_PER_GROUP,
+            "status": "collecting",
+        },
         "class_annotations": {"status": "unavailable", "items": []},
+        "class_schedule": {"status": "unavailable"},
     }
 
 
@@ -271,18 +343,21 @@ def main(
     fetch_json=None,
     generated_at: str | None = None,
     classes_path: Path = DEFAULT_CLASSES_PATH,
+    classes_meta_path: Path = DEFAULT_CLASSES_META_PATH,
 ) -> int:
     readings = _read_readings(readings_path)
     insights = empty_insights()
     insights["generated_at"] = generated_at or datetime.now().astimezone().isoformat()
     insights["class_annotations"] = load_class_schedule(classes_path)
+    insights["class_schedule"] = load_class_schedule_metadata(classes_meta_path)
     if readings:
         insights["latest"] = readings[-1]
         insights["baselines"] = median_baseline(readings)
     recommendations = quiet_window_recommendations(readings)
     insights["recommendations"] = recommendations["items"]
     insights["recommendations_status"] = recommendations["status"]
-    if len(readings) >= 20:
+    insights["recommendation_progress"] = recommendation_progress(readings)
+    if readings:
         try:
             weather_by_hour = load_weather(readings, fetch_json or fetch_open_meteo_json)
             rows = []
@@ -302,8 +377,14 @@ def main(
             if correlation["status"] == "observed":
                 correlation["label"] = "observed association"
             insights["correlations"] = correlation
+            insights["weather_progress"] = weather_progress(rows)
         except (OSError, TypeError, ValueError, KeyError):
-            pass
+            insights["weather_progress"] = {
+                "rainy_dates": 0,
+                "dry_dates": 0,
+                "required_dates_per_group": WEATHER_REQUIRED_DATES_PER_GROUP,
+                "status": "unavailable",
+            }
     _write_json_atomically(insights_path, insights)
     return 0
 

@@ -16,12 +16,15 @@ from scripts.analyze import (
     empty_insights,
     holiday_context,
     load_class_schedule,
+    load_class_schedule_metadata,
     load_weather,
     main,
     median_baseline,
+    recommendation_progress,
     quiet_window_recommendations,
     slot_key,
     weather_association,
+    weather_progress,
 )
 
 
@@ -96,8 +99,61 @@ class ClassScheduleTests(unittest.TestCase):
 
             self.assertEqual(load_class_schedule(path), {"status": "unavailable", "items": []})
 
+    def test_loads_only_valid_fresh_or_stale_schedule_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "classes_meta.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "status": "stale",
+                        "source_url": "https://class-prod.crunch.com/week_schedule.pdf?club_id=40",
+                        "fetched_at": "2026-08-20T08:48:33Z",
+                    }
+                )
+            )
+
+            self.assertEqual(
+                load_class_schedule_metadata(path),
+                {
+                    "status": "stale",
+                    "source_url": "https://class-prod.crunch.com/week_schedule.pdf?club_id=40",
+                    "fetched_at": "2026-08-20T08:48:33Z",
+                },
+            )
+
+    def test_malformed_schedule_metadata_is_unavailable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "classes_meta.json"
+            path.write_text('{"status": "fresh", "source_url": 3}')
+
+            self.assertEqual(load_class_schedule_metadata(path), {"status": "unavailable"})
+
 
 class RecommendationTests(unittest.TestCase):
+    def test_reports_maximum_independent_dates_for_an_exact_slot(self):
+        readings = [
+            {"local": "2026-08-17T18:07:00-04:00", "occupancy": 20},
+            {"local": "2026-08-17T18:08:00-04:00", "occupancy": 22},
+            {"local": "2026-08-24T18:07:00-04:00", "occupancy": 24},
+            {"local": "2026-08-31T18:07:00-04:00", "occupancy": 26},
+        ]
+
+        self.assertEqual(
+            recommendation_progress(readings),
+            {"matching_dates": 3, "required_dates": 4, "status": "collecting"},
+        )
+
+    def test_counts_repeat_samples_from_one_date_once_for_progress(self):
+        readings = [
+            {"local": f"2026-08-17T18:{minute:02d}:00-04:00", "occupancy": 20}
+            for minute in (1, 2, 3, 4)
+        ]
+
+        self.assertEqual(
+            recommendation_progress(readings),
+            {"matching_dates": 1, "required_dates": 4, "status": "collecting"},
+        )
+
     def test_does_not_treat_adjacent_samples_on_one_date_as_independent(self):
         readings = [
             {"local": f"2026-08-17T18:{minute:02d}:00-04:00", "occupancy": 20}
@@ -174,6 +230,25 @@ class AssociationTests(unittest.TestCase):
 
         self.assertEqual(weather_association(rows), {"status": "insufficient_data"})
 
+    def test_weather_progress_counts_only_unmixed_independent_dates(self):
+        rows = [
+            {"local": "2026-08-17T18:00:00-04:00", "residual": 2, "rain": True},
+            {"local": "2026-08-17T18:10:00-04:00", "residual": 3, "rain": True},
+            {"local": "2026-08-18T18:00:00-04:00", "residual": 1, "rain": False},
+            {"local": "2026-08-19T18:00:00-04:00", "residual": 1, "rain": True},
+            {"local": "2026-08-19T18:10:00-04:00", "residual": 1, "rain": False},
+        ]
+
+        self.assertEqual(
+            weather_progress(rows),
+            {
+                "rainy_dates": 1,
+                "dry_dates": 1,
+                "required_dates_per_group": 20,
+                "status": "collecting",
+            },
+        )
+
 
 class WeatherTests(unittest.TestCase):
     def test_loads_open_meteo_weather_by_local_hour_and_marks_rain(self):
@@ -238,8 +313,16 @@ class MainTests(unittest.TestCase):
                 "baselines": {},
                 "recommendations": [],
                 "recommendations_status": "insufficient_data",
+                "recommendation_progress": {"matching_dates": 0, "required_dates": 4, "status": "collecting"},
                 "correlations": {"status": "insufficient_data"},
+                "weather_progress": {
+                    "rainy_dates": 0,
+                    "dry_dates": 0,
+                    "required_dates_per_group": 20,
+                    "status": "collecting",
+                },
                 "class_annotations": {"status": "unavailable", "items": []},
+                "class_schedule": {"status": "unavailable"},
             },
         )
 
@@ -265,10 +348,18 @@ class MainTests(unittest.TestCase):
             readings_path = Path(directory) / "readings.csv"
             insights_path = Path(directory) / "insights.json"
             classes_path = Path(directory) / "classes.csv"
+            classes_meta_path = Path(directory) / "classes_meta.json"
             readings_path.write_text("timestamp_utc,occupancy,status\n")
             classes_path.write_text("weekday,start_local,end_local,class_name\n")
 
-            exit_code = main(readings_path, insights_path, fetch_json, "2026-08-17T12:00:00Z", classes_path)
+            exit_code = main(
+                readings_path,
+                insights_path,
+                fetch_json,
+                "2026-08-17T12:00:00Z",
+                classes_path,
+                classes_meta_path,
+            )
 
             self.assertEqual(exit_code, 0)
             self.assertEqual(
@@ -279,8 +370,16 @@ class MainTests(unittest.TestCase):
                     "baselines": {},
                     "recommendations": [],
                     "recommendations_status": "insufficient_data",
+                    "recommendation_progress": {"matching_dates": 0, "required_dates": 4, "status": "collecting"},
                     "correlations": {"status": "insufficient_data"},
+                    "weather_progress": {
+                        "rainy_dates": 0,
+                        "dry_dates": 0,
+                        "required_dates_per_group": 20,
+                        "status": "collecting",
+                    },
                     "class_annotations": {"status": "empty", "items": []},
+                    "class_schedule": {"status": "unavailable"},
                 },
             )
 
@@ -353,6 +452,41 @@ class MainTests(unittest.TestCase):
             self.assertEqual(len(requested), 1)
             self.assertEqual(insights["correlations"], {"status": "insufficient_data"})
 
+    def test_main_fetches_weather_and_publishes_progress_for_any_reading_count(self):
+        requested = []
+
+        def fetch_json(url):
+            requested.append(url)
+            return {
+                "hourly": {
+                    "time": ["2026-08-17T18:00"],
+                    "temperature_2m": [25.0],
+                    "apparent_temperature": [26.0],
+                    "precipitation": [0.1],
+                    "wind_speed_10m": [8.0],
+                    "weather_code": [61],
+                }
+            }
+
+        with tempfile.TemporaryDirectory() as directory:
+            readings_path = Path(directory) / "readings.csv"
+            insights_path = Path(directory) / "insights.json"
+            readings_path.write_text("timestamp_utc,occupancy,status\n2026-08-17T22:07:00Z,34,light\n")
+
+            main(readings_path, insights_path, fetch_json, "2026-08-17T23:00:00Z")
+
+            insights = json.loads(insights_path.read_text())
+            self.assertEqual(len(requested), 1)
+            self.assertEqual(
+                insights["weather_progress"],
+                {
+                    "rainy_dates": 1,
+                    "dry_dates": 0,
+                    "required_dates_per_group": 20,
+                    "status": "collecting",
+                },
+            )
+
     def test_main_publishes_baselines_when_weather_loading_fails(self):
         def fetch_json(_url):
             raise OSError("weather service unavailable")
@@ -373,6 +507,50 @@ class MainTests(unittest.TestCase):
             self.assertEqual(insights["latest"]["occupancy"], 34)
             self.assertEqual(insights["baselines"], {"0-18:00": {"median": 34.0, "n": 20}})
             self.assertEqual(insights["correlations"], {"status": "insufficient_data"})
+            self.assertEqual(
+                insights["weather_progress"],
+                {
+                    "rainy_dates": 0,
+                    "dry_dates": 0,
+                    "required_dates_per_group": 20,
+                    "status": "unavailable",
+                },
+            )
+
+    def test_main_publishes_stale_class_schedule_metadata_without_calling_it_fresh(self):
+        with tempfile.TemporaryDirectory() as directory:
+            readings_path = Path(directory) / "readings.csv"
+            insights_path = Path(directory) / "insights.json"
+            classes_path = Path(directory) / "classes.csv"
+            classes_meta_path = Path(directory) / "classes_meta.json"
+            readings_path.write_text("timestamp_utc,occupancy,status\n")
+            classes_path.write_text("weekday,start_local,end_local,class_name\n")
+            classes_meta_path.write_text(
+                json.dumps(
+                    {
+                        "status": "stale",
+                        "source_url": "https://class-prod.crunch.com/week_schedule.pdf?club_id=40",
+                        "fetched_at": "2026-08-20T08:48:33Z",
+                    }
+                )
+            )
+
+            main(
+                readings_path,
+                insights_path,
+                generated_at="2026-08-20T09:00:00Z",
+                classes_path=classes_path,
+                classes_meta_path=classes_meta_path,
+            )
+
+            self.assertEqual(
+                json.loads(insights_path.read_text())["class_schedule"],
+                {
+                    "status": "stale",
+                    "source_url": "https://class-prod.crunch.com/week_schedule.pdf?club_id=40",
+                    "fetched_at": "2026-08-20T08:48:33Z",
+                },
+            )
 
     def test_main_uses_the_standard_library_weather_fetcher_by_default(self):
         class Response:
