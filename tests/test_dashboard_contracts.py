@@ -9,6 +9,7 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.page = (ROOT / "docs" / "index.html").read_text()
+        cls.readme = (ROOT / "README.md").read_text()
 
     def test_quiet_workout_regions_keep_the_page_compact(self):
         for contract in (
@@ -62,6 +63,20 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
             "Weather context is unavailable; no weather comparison is shown.",
         ):
             self.assertIn(contract, self.page)
+
+    def test_readme_describes_the_quiet_workout_evidence_standard(self):
+        for contract in (
+            "quiet-workout planner",
+            "latest\nrecorded state",
+            "last 24 recorded hours",
+            "week-to-week stability",
+            "progress instead of a recommendation",
+            "independent local dates",
+            "historical range",
+            "Observed association, not proof",
+            "contextual annotations,\nnot causal explanations",
+        ):
+            self.assertIn(contract, self.readme)
 
     def test_unavailable_readings_clear_all_downstream_regions(self):
         start = self.page.index("function renderUnavailable()")
