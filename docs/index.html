@@ -203,6 +203,7 @@
       (() => {
         "use strict";
         const NEW_YORK = "America/New_York";
+        const LIVE_DATA_ORIGIN = "https://crunch-81st-crowd-api.ozanpochette.workers.dev/v1";
         const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
         const fmt = new Intl.DateTimeFormat("en-US", { timeZone: NEW_YORK, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
         const dayFmt = new Intl.DateTimeFormat("en-US", { timeZone: NEW_YORK, weekday: "short" });
@@ -626,7 +627,10 @@
         }
 
         async function init() {
-          const [csvResult, insightsResult] = await Promise.allSettled([fetchText("./data/readings.csv"), fetchText("./data/insights.json")]);
+          const [csvResult, insightsResult] = await Promise.allSettled([
+            fetchText(`${LIVE_DATA_ORIGIN}/readings.csv?days=90`),
+            fetchText(`${LIVE_DATA_ORIGIN}/insights.json?days=90`),
+          ]);
           const csv = csvResult.status === "fulfilled" ? parseCSV(csvResult.value) : { ok: false, readings: [] };
           if (!csv.ok) {
             renderUnavailable();

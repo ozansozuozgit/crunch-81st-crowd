@@ -23,6 +23,14 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
             'id="stability-strip"',
         ):
             self.assertIn(contract, self.page)
+
+    def test_live_crowd_data_uses_the_credit_independent_worker_origin(self):
+        self.assertIn(
+            'const LIVE_DATA_ORIGIN = "https://crunch-81st-crowd-api.ozanpochette.workers.dev/v1";',
+            self.page,
+        )
+        self.assertIn('fetchText(`${LIVE_DATA_ORIGIN}/readings.csv?days=90`)', self.page)
+        self.assertIn('fetchText(`${LIVE_DATA_ORIGIN}/insights.json?days=90`)', self.page)
         self.assertNotIn('id="class-list"', self.page)
         self.assertNotIn('function renderClassAnnotations', self.page)
 

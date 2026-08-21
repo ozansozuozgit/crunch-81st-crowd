@@ -16,7 +16,9 @@ historical range.
 
 ## Source and collection
 
-Each reading comes from the public embedded club record on the official
+Live collection runs on a Cloudflare Worker Cron and is stored in Cloudflare
+D1, so it does not consume GitHub Actions credits. GitHub Pages remains the
+public dashboard host. Each reading comes from the public embedded club record on the official
 [Crunch E 81st St location page](https://www.crunch.com/locations/e-81st-st).
 The collector reads its numeric `current_occupancy` and its accompanying
 `occupancy_status`; it does not use a login, secrets, a member account, or a

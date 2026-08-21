@@ -1,0 +1,15 @@
+{
+  "$schema": "https://unpkg.com/wrangler@4/config-schema.json",
+  "name": "crunch-81st-crowd-api",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-21",
+  "workers_dev": true,
+  "triggers": { "crons": ["7,17,27,37,47,57 * * * *"] },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "crunch-81st-crowd",
+    "database_id": "17cd9719-7ac0-4572-bbf2-96e04e57e6aa",
+    "migrations_dir": "migrations"
+  }]
+}
+
