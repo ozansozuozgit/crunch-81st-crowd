@@ -1,8 +1,6 @@
 name: Analyze crowd insights
 
 on:
-  schedule:
-    - cron: "23 23 * * *"
   workflow_dispatch:
 
 permissions:

@@ -8,12 +8,11 @@ SETUP_PYTHON_V5_6_0 = "a26af69be951a213d495a4c3e4e4022e16d87065"
 
 
 class WorkflowConfigurationTests(unittest.TestCase):
-    def test_collect_workflow_is_a_ten_minute_safe_data_commit(self):
+    def test_collect_workflow_is_a_manual_archive_path_when_cloudflare_is_primary(self):
         workflow = (ROOT / ".github" / "workflows" / "collect.yml").read_text()
 
         for expected in (
             "name: Collect Crunch occupancy",
-            'cron: "7,17,27,37,47,57 * * * *"',
             "workflow_dispatch:",
             "contents: write",
             "ubuntu-latest",
@@ -39,6 +38,7 @@ class WorkflowConfigurationTests(unittest.TestCase):
             self.assertIn(expected, workflow)
 
         self.assertIn('git diff --cached --quiet || {', workflow)
+        self.assertNotIn("schedule:", workflow)
         self.assertLess(
             workflow.index("python -m pip install --requirement requirements.txt"),
             workflow.index("python -m unittest discover -v"),
@@ -47,12 +47,11 @@ class WorkflowConfigurationTests(unittest.TestCase):
         self.assertNotIn("actions/setup-python@v5", workflow)
         self.assertNotIn("concurrency:", workflow)
 
-    def test_analyze_workflow_syncs_context_before_analyzing_and_safely_commits_it(self):
+    def test_analyze_workflow_is_a_manual_archive_path_when_cloudflare_is_primary(self):
         workflow = (ROOT / ".github" / "workflows" / "analyze.yml").read_text()
 
         for expected in (
             "name: Analyze crowd insights",
-            'cron: "23 23 * * *"',
             "workflow_dispatch:",
             "contents: write",
             "ubuntu-latest",
@@ -82,6 +81,7 @@ class WorkflowConfigurationTests(unittest.TestCase):
             self.assertIn(expected, workflow)
 
         self.assertIn('git diff --cached --quiet || {', workflow)
+        self.assertNotIn("schedule:", workflow)
         self.assertLess(
             workflow.index("python -m pip install --requirement requirements.txt"),
             workflow.index("python -m unittest discover -v"),
