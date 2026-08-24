@@ -300,7 +300,7 @@
 
         function nyClock(date) {
           const parts = Object.fromEntries(clockFmt.formatToParts(date).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
-          return { weekdayIndex: days.indexOf(parts.weekday), minute: (Number(parts.hour) % 24) * 60 + Number(parts.minute), dateKey: dateKeyFmt.format(date) };
+          return { weekdayIndex: days.indexOf(parts.weekday), hour: Number(parts.hour) % 24, minute: (Number(parts.hour) % 24) * 60 + Number(parts.minute), dateKey: dateKeyFmt.format(date) };
         }
 
         function slotKey(date) {

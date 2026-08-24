@@ -153,8 +153,8 @@ test("today plan marks four independent dates as ready and is closed at night", 
   const insights = buildInsights(rows, "2026-08-24T19:30:00Z");
   assert.equal(insights.today_plan.status, "ready");
   const quietest = insights.today_plan.items[0];
-  assert.equal(quietest.slot, "0-22"); // 10 PM: only ~10 check-ins that hour
-  assert.equal(quietest.expected_rate, 10);
+  assert.equal(quietest.slot, "0-21"); // 9 PM: quietest usable hour
+  assert.equal(quietest.expected_rate, 15);
   const closed = buildInsights(rows, "2026-08-25T04:00:00Z");
   assert.equal(closed.today_plan.status, "closed");
   assert.deepEqual(closed.today_plan.items, []);
