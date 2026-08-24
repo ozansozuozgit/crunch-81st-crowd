@@ -78,13 +78,11 @@
       .stability-item:last-child { border-bottom: 0; }
       .stability-item strong { font-family: var(--display); font-size: 1.45rem; font-weight: 400; line-height: 1; }
       .stability-item span { color: var(--muted); font-family: var(--ui); font-size: .69rem; font-weight: 700; letter-spacing: .04em; text-align: right; text-transform: uppercase; }
-      .factor-grid { display: grid; gap: 0; grid-template-columns: repeat(3, 1fr); }
+      .factor-grid { display: grid; gap: 0; grid-template-columns: repeat(2, 1fr); }
       .factor-grid p { border-left: 1px solid var(--rule); font-size: .98rem; margin: 0; padding: 0 18px; }
       .factor-grid p:first-child { border-left: 0; padding-left: 0; }
       .factor-grid strong { color: var(--orange-deep); display: block; font-family: var(--ui); font-size: .67rem; letter-spacing: .08em; margin-bottom: 6px; text-transform: uppercase; }
-      .schedule-context { border-top: 1px solid rgba(242,236,223,.4); color: var(--paper-dim); margin-top: 30px; padding-top: 14px; }
-      .schedule-context p { margin-bottom: 0; }
-      .schedule-context a { color: var(--paper); }
+      .stability-item.is-best strong { color: var(--orange-deep); }
       .methods { border-top: 1px solid rgba(242,236,223,.4); margin-top: 46px; padding-top: 20px; }
       .methods h2 { color: var(--orange); font-family: var(--display); font-size: 2.1rem; font-weight: 400; margin-bottom: 10px; text-transform: uppercase; }
       .methods-grid { display: grid; gap: 20px; grid-template-columns: repeat(3, 1fr); }
@@ -133,6 +131,15 @@
         </div>
       </section>
 
+      <section aria-labelledby="today-heading">
+        <div class="section-heading"><h2 id="today-heading">Go today</h2><p id="today-mode">Historical baselines</p></div>
+        <div class="paper">
+          <ol class="quiet-list" id="today-list"></ol>
+          <p class="empty-note" id="today-empty">Loading today’s quietest remaining windows…</p>
+          <p class="chart-caption" id="today-caption">Ranked by the recorded median for this weekday and time of day, from the public occupancy history.</p>
+        </div>
+      </section>
+
       <section aria-labelledby="last24-heading">
         <div class="section-heading"><h2 id="last24-heading">Last 24 recorded hours</h2><p id="chart-period">Awaiting readings</p></div>
         <div class="paper chart-wrap" id="chart-region">
@@ -164,6 +171,11 @@
             <p class="empty-note" id="heatmap-empty">No readings have been collected yet.</p>
           </div>
           <div class="paper">
+            <p class="data-note">Typical day level</p>
+            <div class="stability-strip" id="day-strip"></div>
+            <p class="empty-note" id="day-empty">Per-weekday medians appear as days accumulate.</p>
+          </div>
+          <div class="paper">
             <p class="data-note">Month stability</p>
             <div class="stability-strip" id="stability-strip"></div>
             <p class="empty-note" id="stability-empty">Week-to-week stability appears after quiet windows qualify.</p>
@@ -177,14 +189,9 @@
           <div class="factor-grid">
             <p id="factor-weather"><strong>Weather</strong>Collecting context.</p>
             <p id="factor-holidays"><strong>Holidays</strong>Collecting local dates.</p>
-            <p id="factor-schedule"><strong>Schedule</strong>Source context unavailable.</p>
           </div>
         </div>
       </section>
-
-      <aside class="schedule-context" id="schedule-context" aria-live="polite" hidden>
-        <p class="data-note" id="schedule-source"></p>
-      </aside>
 
       <aside class="methods" aria-labelledby="methods-heading">
         <h2 id="methods-heading">Read this correctly</h2>
@@ -305,9 +312,6 @@
           $("stability-empty").textContent = "Data unavailable. Stability needs valid public readings.";
           $("factor-weather").replaceChildren();
           $("factor-holidays").replaceChildren();
-          $("factor-schedule").replaceChildren();
-          $("schedule-source").replaceChildren();
-          $("schedule-context").hidden = true;
           $("updated-at").textContent = "Data status: unavailable";
         }
 
@@ -475,28 +479,98 @@
           });
         }
 
-        function isTimezoneAwareTimestamp(value) {
-          if (typeof value !== "string" || !/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return false;
-          return Boolean(safeDate(value));
+        function validTodayPlan(insights) {
+          const plan = insights && insights.today_plan;
+          if (!plan || typeof plan !== "object" || !["ready", "provisional", "closed", "collecting"].includes(plan.status)) return null;
+          if (typeof plan.local_date !== "string" || !/^\d{4}-\d\d-\d\d$/.test(plan.local_date)) return null;
+          const rawItems = Array.isArray(plan.items) ? plan.items : [];
+          const items = rawItems.map((item) => {
+            if (!item || typeof item !== "object") return null;
+            const label = recommendationWindowLabel(item.slot);
+            const expected = item.expected_occupancy;
+            const dates = item.independent_dates;
+            return label && Number.isFinite(expected) && expected >= 0 && Number.isInteger(dates) && dates >= 1
+              ? { slot: item.slot, label, expected, dates }
+              : null;
+          });
+          return items.some((item) => item === null) ? null : { status: plan.status, localDate: plan.local_date, items };
         }
 
-        function validClassSchedule(insights) {
-          const schedule = insights && insights.class_schedule;
-          if (!schedule || typeof schedule !== "object" || !["fresh", "stale"].includes(schedule.status)) return null;
-          if (typeof schedule.source_url !== "string" || !isTimezoneAwareTimestamp(schedule.fetched_at)) return null;
-          if (schedule.last_attempt_at !== undefined && !isTimezoneAwareTimestamp(schedule.last_attempt_at)) return null;
-          try {
-            const source = new URL(schedule.source_url);
-            if (source.protocol !== "https:" || source.username || source.password || source.hostname !== "class-prod.crunch.com") return null;
-            return {
-              status: schedule.status,
-              source,
-              fetchedAt: safeDate(schedule.fetched_at),
-              lastAttemptAt: schedule.last_attempt_at ? safeDate(schedule.last_attempt_at) : null,
-            };
-          } catch (_) {
-            return null;
+        function renderTodayPlan(insights) {
+          const list = $("today-list");
+          list.replaceChildren();
+          const empty = $("today-empty");
+          const caption = $("today-caption");
+          const mode = $("today-mode");
+          const plan = validTodayPlan(insights);
+          if (!plan) {
+            empty.hidden = false;
+            empty.textContent = "Today’s guidance needs the live insights feed. Refresh to retry.";
+            mode.textContent = "Unavailable";
+            caption.textContent = "";
+            return;
           }
+          if (plan.status === "closed") {
+            empty.hidden = false;
+            empty.textContent = "The club is closed at the moment this page loaded. Check back during scheduled open hours.";
+            mode.textContent = "Closed now";
+            caption.textContent = "";
+            return;
+          }
+          if (!plan.items.length) {
+            empty.hidden = false;
+            empty.textContent = "No historical window covers the rest of today yet. Earlier days will fill this in.";
+            mode.textContent = "Collecting";
+            caption.textContent = "";
+            return;
+          }
+          empty.hidden = true;
+          mode.textContent = plan.status === "provisional" ? "Early sample" : "Qualified baselines";
+          caption.textContent = plan.status === "provisional"
+            ? `Early sample for ${plan.localDate}: these windows have fewer than four independent local dates behind them, so expect them to move as data accumulates.`
+            : `Ranked by recorded median occupancy for ${plan.localDate} across independent local dates.`;
+          plan.items.forEach((item, index) => {
+            const li = document.createElement("li");
+            const rank = document.createElement("span"); rank.className = "rank"; rank.textContent = String(index + 1).padStart(2, "0");
+            const windowEl = document.createElement("span"); windowEl.className = "window"; windowEl.textContent = `${item.label} · expected`;
+            const evidence = document.createElement("small"); evidence.textContent = `${item.dates} independent date${item.dates === 1 ? "" : "s"} behind this median`; windowEl.append(evidence);
+            const number = document.createElement("span"); number.className = "median"; number.textContent = Number.isInteger(item.expected) ? String(item.expected) : item.expected.toFixed(1);
+            const numberLabel = document.createElement("small"); numberLabel.textContent = "typical"; number.append(numberLabel);
+            li.append(rank, windowEl, number); list.append(li);
+          });
+        }
+
+        function validWeekdayProfile(insights) {
+          const profile = insights && insights.weekday_profile;
+          if (!Array.isArray(profile)) return [];
+          const items = profile.map((item) => {
+            if (!item || typeof item !== "object") return null;
+            const weekdayIndex = item.weekday_index;
+            const typical = item.typical_daily_occupancy;
+            const dates = item.independent_dates;
+            return Number.isInteger(weekdayIndex) && weekdayIndex >= 0 && weekdayIndex < days.length && days[weekdayIndex] === item.weekday
+              && Number.isFinite(typical) && typical >= 0 && Number.isInteger(dates) && dates >= 1
+              ? { weekdayIndex, weekday: item.weekday, typical, dates }
+              : null;
+          });
+          return items.some((item) => item === null) ? [] : items;
+        }
+
+        function renderDayStrip(insights) {
+          const strip = $("day-strip");
+          strip.replaceChildren();
+          const items = validWeekdayProfile(insights);
+          if (!items.length) {
+            $("day-empty").hidden = false;
+            return;
+          }
+          $("day-empty").hidden = true;
+          items.forEach((item, index) => {
+            const row = document.createElement("div"); row.className = "stability-item" + (index === 0 && items.length > 1 ? " is-best" : "");
+            const label = document.createElement("strong"); label.textContent = item.weekday;
+            const detail = document.createElement("span"); detail.textContent = `typical day level ${Number.isInteger(item.typical) ? String(item.typical) : item.typical.toFixed(1)} · ${item.dates} date${item.dates === 1 ? "" : "s"}`;
+            row.append(label, detail); strip.append(row);
+          });
         }
 
         function validMonthlyStability(insights, quietDetails) {
@@ -538,12 +612,10 @@
           if (!context || typeof context !== "object") return null;
           const holidayDates = context.holiday_dates;
           const nonHolidayDates = context.non_holiday_dates;
-          const scheduleStatus = context.class_schedule_status;
-          if (!Number.isInteger(holidayDates) || holidayDates < 0 || !Number.isInteger(nonHolidayDates) || nonHolidayDates < 0
-            || !["fresh", "stale", "unavailable"].includes(scheduleStatus)) return null;
+          if (!Number.isInteger(holidayDates) || holidayDates < 0 || !Number.isInteger(nonHolidayDates) || nonHolidayDates < 0) return null;
           const weather = validWeatherProgress({ weather_progress: context.weather_progress });
           if (!weather) return null;
-          return { holidayDates, nonHolidayDates, scheduleStatus, weather };
+          return { holidayDates, nonHolidayDates, weather };
         }
 
         function validObservedWeather(insights) {
@@ -567,37 +639,17 @@
           if (!context) {
             factorLine("factor-weather", "Weather", "Validated context is unavailable.");
             factorLine("factor-holidays", "Holidays", "Validated context is unavailable.");
-            factorLine("factor-schedule", "Schedule", "Validated context is unavailable.");
             return;
           }
           const observed = validObservedWeather(insights);
           const weather = context.weather;
           const weatherCopy = weather.status === "unavailable"
-            ? "Weather context is unavailable; no weather comparison is shown."
+            ? "Daily local weather is being recorded; a comparison appears once enough independent dates exist."
             : observed
               ? `Observed association, not proof: rainy dates were recorded ${Math.abs(observed.effect).toFixed(1)} ${observed.effect >= 0 ? "higher" : "lower"} after the time-slot baseline.`
               : `Tracking: ${weather.rainyDates} rainy / 20 and ${weather.dryDates} dry / 20 independent dates.`;
           factorLine("factor-weather", "Weather", weatherCopy);
           factorLine("factor-holidays", "Holidays", `${context.holidayDates} holiday local date${context.holidayDates === 1 ? "" : "s"} / ${context.nonHolidayDates} non-holiday local date${context.nonHolidayDates === 1 ? "" : "s"} recorded.`);
-          factorLine("factor-schedule", "Schedule", `${context.scheduleStatus} public schedule metadata may matter as timing context.`);
-        }
-
-        function renderScheduleContext(insights) {
-          const schedule = validClassSchedule(insights);
-          const sourceNote = $("schedule-source");
-          sourceNote.replaceChildren();
-          if (!schedule) { $("schedule-context").hidden = true; return; }
-          $("schedule-context").hidden = false;
-          const link = document.createElement("a");
-          link.href = schedule.source.href;
-          link.textContent = "Public Crunch schedule";
-          link.rel = "noreferrer";
-          link.target = "_blank";
-          sourceNote.append("Source: ", link, document.createTextNode(` · last verified ${fmt.format(schedule.fetchedAt)}`));
-          if (schedule.status === "stale") {
-            const attempt = schedule.lastAttemptAt ? ` Refresh failed ${fmt.format(schedule.lastAttemptAt)};` : " Schedule is stale;";
-            sourceNote.append(document.createTextNode(`${attempt} retained schedule may be out of date.`));
-          }
         }
 
         function validWeatherProgress(insights) {
@@ -611,17 +663,19 @@
 
         if (globalThis.__CROWD_DESK_TEST_HOOKS__) {
           Object.assign(globalThis.__CROWD_DESK_TEST_HOOKS__, {
-            validClassSchedule,
             chartRangeLabel,
             validRecommendationProgress,
             validWeatherProgress,
             validQuietDetails,
+            validTodayPlan,
+            validWeekdayProfile,
             validMonthlyStability,
             validFactorContext,
+            renderTodayPlan,
+            renderDayStrip,
             renderQuietPlanner,
             renderMonthlyStability,
             renderFactors,
-            renderScheduleContext,
             renderUnavailable,
           });
         }
@@ -640,13 +694,14 @@
           const readings = csv.readings;
           const insights = insightsResult.status === "fulfilled" ? parseInsights(insightsResult.value) : {};
           renderLatest(readings, insights);
+          renderTodayPlan(insights);
           renderChart(readings);
           const history = hourlyHistory(readings);
           renderHeatmap(history);
           renderQuietPlanner(insights);
+          renderDayStrip(insights);
           renderMonthlyStability(insights);
           renderFactors(insights);
-          renderScheduleContext(insights);
           $("announce").textContent = readings.length ? `Loaded ${readings.length} recorded crowd readings.` : "No valid crowd readings are available yet.";
         }
         init().catch(() => { $("announce").textContent = "The dashboard could not load its public data."; });

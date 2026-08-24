@@ -9,6 +9,7 @@ const HOURS = [[5 * 60, 23 * 60], [5 * 60, 23 * 60], [5 * 60, 23 * 60], [5 * 60,
 const partsFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: NEW_YORK, weekday: "short", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const ARCHIVE_CRON = "11 4 * * *";
+const WEATHER_URL = "https://api.open-meteo.com/v1/forecast?latitude=40.7829&longitude=-73.9654&daily=precipitation_sum&past_days=7&forecast_days=1&timezone=America%2FNew_York";
 
 function htmlDecode(value) {
   return value.replace(/&quot;/g, '"').replace(/&#34;/g, '"').replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
@@ -35,6 +36,11 @@ function localParts(timestamp) {
 function slotFor(timestamp) {
   const local = localParts(timestamp);
   return local.weekday + "-" + String(local.hour).padStart(2, "0") + ":" + String(local.minute - (local.minute % 10)).padStart(2, "0");
+}
+
+export function parseSlotKey(slot) {
+  const match = typeof slot === "string" && slot.match(/^([0-6])-(\d{2}):([0-5]\d)$/);
+  return match ? { weekday: Number(match[1]), hour: Number(match[2]), minute: Number(match[3]) } : null;
 }
 
 function median(values) {
@@ -85,7 +91,75 @@ function groupDaily(rows) {
   return result;
 }
 
-export function buildInsights(rows, generatedAt = new Date().toISOString()) {
+export function todayPlan(grouped, baselines, generatedAt) {
+  const local = localParts(generatedAt);
+  const minutes = local.hour * 60 + local.minute;
+  const [opens, closes] = HOURS[local.weekday];
+  if (minutes < opens || minutes >= closes) return { status: "closed", local_date: local.date, items: [] };
+  const items = [];
+  for (const [slot, baseline] of Object.entries(baselines)) {
+    const parsed = parseSlotKey(slot);
+    if (!parsed || parsed.weekday !== local.weekday) continue;
+    const start = parsed.hour * 60 + parsed.minute;
+    if (start < minutes || start + 60 > closes) continue;
+    items.push({ slot, expected_occupancy: baseline.median, independent_dates: baseline.n });
+  }
+  items.sort((a, b) => a.expected_occupancy - b.expected_occupancy || a.slot.localeCompare(b.slot));
+  const top = items.slice(0, 5);
+  return { status: top.some((item) => item.independent_dates >= QUIET_DATES) ? "ready" : "provisional", local_date: local.date, items: top };
+}
+
+export function weekdayProfile(grouped) {
+  const perWeekday = Array.from({ length: 7 }, () => new Map());
+  for (const [slot, dates] of grouped) {
+    const parsed = parseSlotKey(slot);
+    if (!parsed) continue;
+    const means = perWeekday[parsed.weekday];
+    for (const [date, values] of dates) {
+      const collected = means.get(date) || [];
+      collected.push(...values);
+      means.set(date, collected);
+    }
+  }
+  return perWeekday.flatMap((dates, weekday) => {
+    if (!dates.size) return [];
+    const dailyMeans = [...dates.values()].map((values) => values.reduce((sum, value) => sum + value, 0) / values.length);
+    return [{ weekday_index: weekday, weekday: dayNames[weekday], typical_daily_occupancy: median(dailyMeans), independent_dates: dates.size }];
+  }).sort((a, b) => a.typical_daily_occupancy - b.typical_daily_occupancy);
+}
+
+export function summarizeWeather(rows, weatherRows) {
+  const precipitationByDate = new Map((weatherRows || []).filter((row) => row && typeof row.local_date === "string" && Number.isFinite(row.precipitation_mm)).map((row) => [row.local_date, row.precipitation_mm]));
+  const dayValues = new Map();
+  for (const row of rows) {
+    const date = localParts(row.timestamp_utc).date;
+    const values = dayValues.get(date) || [];
+    values.push(row.occupancy);
+    dayValues.set(date, values);
+  }
+  let rainy = 0;
+  let dry = 0;
+  const rainyMeans = [];
+  const dryMeans = [];
+  for (const [date, values] of dayValues) {
+    const precip = precipitationByDate.get(date);
+    if (precip === undefined) continue;
+    const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+    if (precip >= 1) { rainy += 1; rainyMeans.push(mean); } else { dry += 1; dryMeans.push(mean); }
+  }
+  const progress = { rainy_dates: rainy, dry_dates: dry, required_dates_per_group: 20, status: rainy || dry ? "collecting" : "unavailable" };
+  let correlations = { status: "insufficient_data" };
+  if (rainy >= 20 && dry >= 20 && rainyMeans.length >= 2 && dryMeans.length >= 2) {
+    const meanOf = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
+    const varianceOf = (values) => { const mean = meanOf(values); return values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1); };
+    const effect = meanOf(rainyMeans) - meanOf(dryMeans);
+    const standardError = Math.sqrt(varianceOf(rainyMeans) / rainy + varianceOf(dryMeans) / dry);
+    correlations = { status: "observed", effect, condition_n: rainy, comparison_n: dry, confidence_low: effect - 1.96 * standardError, confidence_high: effect + 1.96 * standardError };
+  }
+  return { progress, correlations };
+}
+
+export function buildInsights(rows, generatedAt = new Date().toISOString(), weatherRows = []) {
   const grouped = groupDaily(rows);
   const baselines = {};
   const candidates = [];
@@ -111,18 +185,21 @@ export function buildInsights(rows, generatedAt = new Date().toISOString()) {
   const distinctDates = new Set(rows.map((row) => localParts(row.timestamp_utc).date));
   const holidayDates = [...distinctDates].filter(holiday).length;
   const ready = items.length > 0;
+  const weather = summarizeWeather(rows, weatherRows);
   return {
     generated_at: generatedAt,
     latest: rows.at(-1) || null,
     baselines,
+    today_plan: todayPlan(grouped, baselines, generatedAt),
+    weekday_profile: weekdayProfile(grouped),
     recommendations: items.map(({ slot, baseline_occupancy, independent_dates }) => ({ slot, baseline_occupancy, independent_dates })),
     recommendations_status: ready ? "ready" : "insufficient_data",
     recommendation_progress: { matching_dates: matchingDates, required_dates: QUIET_DATES, status: matchingDates >= QUIET_DATES ? "ready" : "collecting" },
     quiet_window_details: { status: ready ? "ready" : "insufficient_data", items: items.map(({ week_spread, ...item }) => item) },
     monthly_stability: { status: ready ? "ready" : "insufficient_data", items: items.map(({ slot, independent_weeks, week_spread }) => ({ slot, independent_weeks, week_spread })) },
-    correlations: { status: "insufficient_data" },
-    weather_progress: { status: "unavailable", rainy_dates: 0, dry_dates: 0, required_dates_per_group: 20 },
-    factor_context: { holiday_dates: holidayDates, non_holiday_dates: distinctDates.size - holidayDates, weather_progress: { status: "unavailable", rainy_dates: 0, dry_dates: 0, required_dates_per_group: 20 }, class_schedule_status: "unavailable" },
+    correlations: weather.correlations,
+    weather_progress: weather.progress,
+    factor_context: { holiday_dates: holidayDates, non_holiday_dates: distinctDates.size - holidayDates, weather_progress: weather.progress, class_schedule_status: "unavailable" },
     class_schedule: { status: "unavailable" },
     class_annotations: { status: "unavailable", items: [] },
   };
@@ -234,10 +311,26 @@ async function collect(env, now = new Date()) {
   return { status: "recorded", timestamp, ...record };
 }
 
+async function recordWeather(env) {
+  const response = await fetch(WEATHER_URL, { headers: { "user-agent": "crunch-81st-cloudflare-collector/1.0" } });
+  if (!response.ok) throw new Error("Open-Meteo returned " + response.status);
+  const payload = await response.json();
+  const dates = payload?.daily?.time;
+  const precipitation = payload?.daily?.precipitation_sum;
+  if (!Array.isArray(dates) || !Array.isArray(precipitation) || dates.length !== precipitation.length || !dates.every((date) => /^\d{4}-\d\d-\d\d$/.test(date))) {
+    throw new Error("invalid weather payload");
+  }
+  await env.DB.batch(dates.map((date, index) => env.DB.prepare("INSERT OR IGNORE INTO daily_weather (local_date, precipitation_mm) VALUES (?, ?)").bind(date, precipitation[index])));
+  return setState(env, "last_weather", new Date().toISOString().replace(/\.\d{3}Z$/, "Z"));
+}
+
 export default {
   async scheduled(controller, env, ctx) {
     if (controller.cron === ARCHIVE_CRON) {
       ctx.waitUntil(archiveReadings(env));
+      ctx.waitUntil(recordWeather(env).catch(async (error) => {
+        await setState(env, "last_weather_error", String(error).slice(0, 240));
+      }));
       return;
     }
     ctx.waitUntil(collect(env).catch(async (error) => {
@@ -262,6 +355,13 @@ export default {
       const result = await archiveReadings(env);
       return responseJson(request, result);
     }
+    if (url.pathname === "/internal/weather" && request.method === "POST") {
+      if (!env.ADMIN_KEY || request.headers.get("authorization") !== "Bearer " + env.ADMIN_KEY) {
+        return responseJson(request, { error: "not found" }, 404);
+      }
+      await recordWeather(env);
+      return responseJson(request, { status: "weather recorded" });
+    }
     if (request.method !== "GET") return responseJson(request, { error: "not found" }, 404);
     if (url.pathname === "/health") {
       const { results } = await env.DB.prepare("SELECT key, value FROM collector_state").all();
@@ -270,7 +370,10 @@ export default {
     const days = Math.min(90, Math.max(7, Number(url.searchParams.get("days") || 90)));
     const rows = await rowsFor(env, Number.isInteger(days) ? days : 90);
     if (url.pathname === "/v1/readings.csv") return new Response(toCsv(rows), { headers: { "content-type": "text/csv; charset=utf-8", ...cors(request) } });
-    if (url.pathname === "/v1/insights.json") return responseJson(request, buildInsights(rows));
+    if (url.pathname === "/v1/insights.json") {
+      const weather = await env.DB.prepare("SELECT local_date, precipitation_mm FROM daily_weather").all();
+      return responseJson(request, buildInsights(rows, undefined, weather.results));
+    }
     return responseJson(request, { error: "not found" }, 404);
   },
 };
