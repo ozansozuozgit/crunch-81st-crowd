@@ -18,14 +18,20 @@ historical range.
 
 Live collection runs on a Cloudflare Worker Cron and is stored in Cloudflare
 D1, so it does not consume GitHub Actions credits. GitHub Pages remains the
-public dashboard host. Each reading comes from the public embedded club record on the official
+public dashboard host and reads live data from the Worker's public read-only
+endpoints. Once daily (04:11 UTC), the Worker also archives the full reading
+history to [`docs/data/readings.csv`](docs/data/readings.csv) through the
+GitHub contents API; this archive step is active only when a
+`GITHUB_TOKEN` secret with write access to this repository is configured on
+the Worker (`npx wrangler secret put GITHUB_TOKEN`). GitHub Actions remain as
+an optional manual path only. Each reading comes from the public embedded club record on the official
 [Crunch E 81st St location page](https://www.crunch.com/locations/e-81st-st).
 The collector reads its numeric `current_occupancy` and its accompanying
 `occupancy_status`; it does not use a login, secrets, a member account, or a
 private Crunch endpoint. `max_occupancy` is deliberately excluded because the
 published value is not treated as a reliable capacity measure.
 
-GitHub Actions requests a measurement every ten minutes at minutes **07, 17,
+A Cloudflare Worker Cron requests a measurement every ten minutes at minutes **07, 17,
 27, 37, 47, and 57 UTC**. The collector separately checks the club's scheduled
 local opening hours, so closed periods produce no reading and no commit. GitHub
 does not promise that scheduled workflows run at the exact requested minute;

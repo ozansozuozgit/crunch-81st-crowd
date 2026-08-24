@@ -1,11 +1,14 @@
 const CRUNCH_URL = "https://www.crunch.com/locations/e-81st-st";
 const BOOTSTRAP_CSV_URL = "https://ozansozuozgit.github.io/crunch-81st-crowd/data/readings.csv";
+const REPO = "ozansozuozgit/crunch-81st-crowd";
+const CSV_PATH = "docs/data/readings.csv";
 const PAGES_ORIGIN = "https://ozansozuozgit.github.io";
 const NEW_YORK = "America/New_York";
 const QUIET_DATES = 4;
 const HOURS = [[5 * 60, 23 * 60], [5 * 60, 23 * 60], [5 * 60, 23 * 60], [5 * 60, 23 * 60], [5 * 60, 22 * 60], [7 * 60, 21 * 60], [8 * 60, 21 * 60]];
 const partsFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: NEW_YORK, weekday: "short", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const ARCHIVE_CRON = "11 4 * * *";
 
 function htmlDecode(value) {
   return value.replace(/&quot;/g, '"').replace(/&#34;/g, '"').replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
@@ -149,6 +152,64 @@ async function rowsFor(env, days = 90) {
   const { results } = await env.DB.prepare("SELECT timestamp_utc, occupancy, status FROM readings WHERE timestamp_utc >= ? ORDER BY timestamp_utc").bind(since).all();
   return results;
 }
+
+function toBase64(text) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function fromBase64(value) {
+  const binary = atob(value);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+function setState(env, key, value) {
+  return env.DB.prepare("INSERT INTO collector_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(key, value).run();
+}
+
+export async function archiveReadings(env, now = new Date()) {
+  if (!env.GITHUB_TOKEN) {
+    await setState(env, "last_archive", "skipped: no GITHUB_TOKEN");
+    return { status: "skipped" };
+  }
+  const headers = {
+    "authorization": "Bearer " + env.GITHUB_TOKEN,
+    "user-agent": "crunch-81st-cloudflare-collector/1.0",
+    "accept": "application/vnd.github+json",
+    "x-github-api-version": "2022-11-28",
+  };
+  const api = "https://api.github.com/repos/" + REPO + "/contents/" + CSV_PATH;
+  try {
+    const { results } = await env.DB.prepare("SELECT timestamp_utc, occupancy, status FROM readings ORDER BY timestamp_utc").all();
+    const csv = toCsv(results);
+    const existing = await fetch(api, { headers });
+    if (!existing.ok && existing.status !== 404) throw new Error("GitHub read returned " + existing.status);
+    const current = existing.ok ? (await existing.json()) : null;
+    if (current && fromBase64(current.content.replace(/\n/g, "")) === csv) {
+      await setState(env, "last_archive", now.toISOString().replace(/\.\d{3}Z$/, "Z") + " unchanged");
+      return { status: "unchanged" };
+    }
+    const committed = await fetch(api, {
+      method: "PUT",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({
+        message: "data: record Crunch occupancy",
+        content: toBase64(csv),
+        ...(current ? { sha: current.sha } : {}),
+      }),
+    });
+    if (!committed.ok) throw new Error("GitHub write returned " + committed.status);
+    const stamp = now.toISOString().replace(/\.\d{3}Z$/, "Z");
+    await setState(env, "last_archive", stamp + " committed " + results.length + " rows");
+    return { status: "committed", rows: results.length };
+  } catch (error) {
+    await setState(env, "last_archive", String(error).slice(0, 240));
+    throw error;
+  }
+}
 async function bootstrap(env) {
   const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM readings").first();
   if (Number(count.n) > 0) return;
@@ -174,7 +235,11 @@ async function collect(env, now = new Date()) {
 }
 
 export default {
-  async scheduled(_controller, env, ctx) {
+  async scheduled(controller, env, ctx) {
+    if (controller.cron === ARCHIVE_CRON) {
+      ctx.waitUntil(archiveReadings(env));
+      return;
+    }
     ctx.waitUntil(collect(env).catch(async (error) => {
       await env.DB.prepare("INSERT INTO collector_state (key, value) VALUES ('last_error', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(String(error).slice(0, 240)).run();
       throw error;
@@ -189,6 +254,13 @@ export default {
       }
       await bootstrap(env);
       return responseJson(request, { status: "bootstrapped" });
+    }
+    if (url.pathname === "/internal/archive" && request.method === "POST") {
+      if (!env.ADMIN_KEY || request.headers.get("authorization") !== "Bearer " + env.ADMIN_KEY) {
+        return responseJson(request, { error: "not found" }, 404);
+      }
+      const result = await archiveReadings(env);
+      return responseJson(request, result);
     }
     if (request.method !== "GET") return responseJson(request, { error: "not found" }, 404);
     if (url.pathname === "/health") {

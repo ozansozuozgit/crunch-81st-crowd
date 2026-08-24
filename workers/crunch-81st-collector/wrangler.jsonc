@@ -4,7 +4,7 @@
   "main": "src/index.js",
   "compatibility_date": "2026-08-21",
   "workers_dev": true,
-  "triggers": { "crons": ["7,17,27,37,47,57 * * * *"] },
+  "triggers": { "crons": ["7,17,27,37,47,57 * * * *", "11 4 * * *"] },
   "d1_databases": [{
     "binding": "DB",
     "database_name": "crunch-81st-crowd",
