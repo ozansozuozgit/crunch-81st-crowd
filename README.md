@@ -4,8 +4,9 @@ A public, measured record of the occupancy signal for Crunch E 81st St in New
 York City. The dashboard is a static, quiet-workout planner in
 [`docs/`](docs/), backed by a timestamped CSV rather than a claim of exact club
 capacity or a forecast made from unobserved data. It presents the latest
-recorded state, the last 24 recorded hours, evidence-qualified repeatable quiet
-windows, and their week-to-week stability. When the history is still too thin,
+recorded state, today against the typical day for its weekday,
+evidence-qualified repeatable quiet windows, and their week-to-week stability.
+When the history is still too thin,
 it shows progress instead of a recommendation.
 
 Weather, holidays, and the public class schedule are contextual annotations,

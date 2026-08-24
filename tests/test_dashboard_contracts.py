@@ -11,16 +11,18 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
         cls.page = (ROOT / "docs" / "index.html").read_text()
         cls.readme = (ROOT / "README.md").read_text()
 
-    def test_quiet_workout_regions_keep_the_page_compact(self):
+    def test_go_now_regions_keep_the_page_compact(self):
         for contract in (
-            'id="last24-heading">Last 24 recorded hours',
-            'Recorded occupancy over the last 24 hours',
-            "function chartRangeLabel(start, end)",
+            'id="today-heading">Go today',
+            'id="last24-heading">Today vs a typical day',
+            'id="stat-now"',
+            'id="stat-peak"',
+            'id="stat-quiet"',
             'id="quiet-heading">Best quiet workout windows',
             'id="pattern-heading">Week / hour pattern',
             'id="factors-heading">What may matter',
-            'id="schedule-context"',
             'id="stability-strip"',
+            'id="day-strip"',
         ):
             self.assertIn(contract, self.page)
 
@@ -33,6 +35,11 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
         self.assertIn('fetchText(`${LIVE_DATA_ORIGIN}/insights.json?days=90`)', self.page)
         self.assertNotIn('id="class-list"', self.page)
         self.assertNotIn('function renderClassAnnotations', self.page)
+        self.assertNotIn('id="schedule-context"', self.page)
+        self.assertNotIn("function renderScheduleContext", self.page)
+        self.assertNotIn("function validClassSchedule", self.page)
+        self.assertNotIn("function renderChart", self.page)
+        self.assertNotIn("function chartRangeLabel", self.page)
 
     def test_validated_evidence_contracts_guard_public_claims(self):
         for contract in (
@@ -44,18 +51,26 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
             "independentWeeks < 1",
             "function validMonthlyStability(insights, quietDetails)",
             "function validFactorContext(insights)",
-            "function validClassSchedule(insights)",
-            'source.protocol !== "https:"',
-            'source.hostname !== "class-prod.crunch.com"',
+            "function validTodayPlan(insights)",
+            "function validWeekdayProfile(insights)",
+            "function validBaselineFor(insights, key)",
             "function renderQuietPlanner(insights)",
             "function renderMonthlyStability(insights)",
             "function renderFactors(insights)",
-            "function renderScheduleContext(insights)",
+            "function renderTodayPlan(insights)",
+            "function renderDayStrip(insights)",
+            "function renderNowDelta(readings, insights)",
+            "function renderStatChips(readings, insights)",
+            "function renderTodayVsTypical(readings)",
             "function renderUnavailable()",
             "renderQuietPlanner(insights);",
             "renderMonthlyStability(insights);",
             "renderFactors(insights);",
-            "renderScheduleContext(insights);",
+            "renderTodayPlan(insights);",
+            "renderDayStrip(insights);",
+            "renderNowDelta(readings, insights);",
+            "renderStatChips(readings, insights);",
+            "renderTodayVsTypical(readings);",
         ):
             self.assertIn(contract, self.page)
 
@@ -67,8 +82,7 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
             "Observed association, not proof",
             "Tracking: ${progress.matchingDates} / 4 matching weekday-time observations.",
             "Tracking: ${weather.rainyDates} rainy / 20 and ${weather.dryDates} dry / 20 independent dates.",
-            "retained schedule may be out of date",
-            "Weather context is unavailable; no weather comparison is shown.",
+            "fewer than four independent local dates behind them",
         ):
             self.assertIn(contract, self.page)
 
@@ -76,7 +90,7 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
         for contract in (
             "quiet-workout planner",
             "latest\nrecorded state",
-            "last 24 recorded hours",
+            "today against the typical day for its weekday",
             "week-to-week stability",
             "progress instead of a recommendation",
             "independent local dates",
@@ -97,8 +111,10 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
             '$("stability-strip").replaceChildren();',
             '$("factor-weather").replaceChildren();',
             '$("factor-holidays").replaceChildren();',
-            '$("schedule-source").replaceChildren();',
-            '$("schedule-context").hidden = true;',
+            '$("now-delta").hidden = true;',
+            '$("stat-now").textContent = "—";',
+            '$("stat-peak").textContent = "—";',
+            '$("stat-quiet").textContent = "—";',
         ):
             self.assertIn(contract, unavailable)
 

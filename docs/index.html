@@ -43,6 +43,11 @@
       .count span { color: var(--paper-dim); font-family: var(--ui); font-size: .8rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
       .measure-time { color: var(--paper-dim); margin: 18px 0 0; }
       .measure-time strong { color: var(--paper); }
+      .measure-time[hidden] { display: none; }
+      .stat-row { display: grid; gap: 14px; grid-template-columns: repeat(3, 1fr); margin-bottom: 14px; }
+      .stat { padding: 16px 18px; }
+      .stat strong { display: block; font-family: var(--display); font-size: clamp(1.9rem, 3.4vw, 2.7rem); font-weight: 400; line-height: .9; margin-top: 6px; }
+      .stat small { color: var(--muted); display: block; font-family: var(--ui); font-size: .65rem; font-weight: 700; letter-spacing: .06em; margin-top: 5px; text-transform: uppercase; }
       .signal { background: var(--orange); color: var(--black); display: flex; flex-direction: column; justify-content: space-between; padding: 25px 28px; }
       .signal strong { font-family: var(--display); font-size: clamp(2.2rem, 5vw, 4rem); font-weight: 400; line-height: .84; text-transform: uppercase; }
       .signal p { font-family: var(--ui); font-size: .82rem; font-weight: 700; margin: 20px 0 0; }
@@ -96,7 +101,7 @@
         .masthead { padding-top: 14px; }
         .kicker { align-items: flex-start; flex-direction: column; }
         h1 { margin-top: 34px; }
-        .status-strip, .grid, .methods-grid, .factor-grid { grid-template-columns: 1fr; }
+        .status-strip, .grid, .methods-grid, .factor-grid, .stat-row { grid-template-columns: 1fr; }
         .factor-grid p, .factor-grid p:first-child { border-left: 0; border-top: 1px solid var(--rule); padding: 13px 0; }
         .factor-grid p:first-child { border-top: 0; padding-top: 0; }
         .latest, .signal { padding: 21px; }
@@ -123,6 +128,7 @@
           <div class="eyebrow" id="latest-heading">Latest measured count</div>
           <div class="count"><strong id="latest-count">—</strong><span id="latest-unit">no reading yet</span></div>
           <p class="measure-time" id="latest-time">Waiting for the first public measurement.</p>
+          <p class="measure-time" id="now-delta" hidden></p>
         </div>
         <div class="signal" aria-label="Reading status">
           <span class="label">Signal status</span>
@@ -141,14 +147,19 @@
       </section>
 
       <section aria-labelledby="last24-heading">
-        <div class="section-heading"><h2 id="last24-heading">Last 24 recorded hours</h2><p id="chart-period">Awaiting readings</p></div>
+        <div class="section-heading"><h2 id="last24-heading">Today vs a typical day</h2><p id="chart-period">Awaiting readings</p></div>
+        <div class="stat-row">
+          <div class="paper stat"><span class="data-note">Now vs typical</span><strong id="stat-now">—</strong><small id="stat-now-note">latest reading against this weekday and time</small></div>
+          <div class="paper stat"><span class="data-note">Today’s peak</span><strong id="stat-peak">—</strong><small id="stat-peak-note">no readings yet today</small></div>
+          <div class="paper stat"><span class="data-note">Quietest remaining</span><strong id="stat-quiet">—</strong><small id="stat-quiet-note">from today’s baselines</small></div>
+        </div>
         <div class="paper chart-wrap" id="chart-region">
-          <p class="chart-empty" id="chart-empty">No readings have been collected in the last 24 hours.</p>
+          <p class="chart-empty" id="chart-empty">No typical curve for this weekday yet.</p>
           <svg id="occupancy-chart" viewBox="0 0 920 310" role="img" aria-labelledby="chart-title chart-desc" hidden>
-            <title id="chart-title">Recorded occupancy over the last 24 hours</title>
+            <title id="chart-title">Today’s recorded occupancy against a typical day for this weekday</title>
             <desc id="chart-desc">No recorded readings available.</desc>
           </svg>
-          <p class="chart-caption" id="chart-caption">Every point is a recorded public Crunch occupancy value. Missing time is left missing, not estimated.</p>
+          <p class="chart-caption" id="chart-caption">The dashed curve is the recorded median for this weekday and time; the shaded band is its middle half. Today’s line is the live record. Missing time is left missing, not estimated.</p>
         </div>
       </section>
 
@@ -261,6 +272,25 @@
           return { weekdayIndex: days.indexOf(weekday), hour };
         }
 
+        const OPEN_HOURS = [[5 * 60, 23 * 60], [5 * 60, 23 * 60], [5 * 60, 23 * 60], [5 * 60, 23 * 60], [5 * 60, 22 * 60], [7 * 60, 21 * 60], [8 * 60, 21 * 60]];
+        const dateKeyFmt = new Intl.DateTimeFormat("en-CA", { timeZone: NEW_YORK, year: "numeric", month: "2-digit", day: "2-digit" });
+        const clockFmt = new Intl.DateTimeFormat("en-US", { timeZone: NEW_YORK, weekday: "short", hour: "numeric", hourCycle: "h23", minute: "2-digit" });
+
+        function nyClock(date) {
+          const parts = Object.fromEntries(clockFmt.formatToParts(date).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+          return { weekdayIndex: days.indexOf(parts.weekday), minute: (Number(parts.hour) % 24) * 60 + Number(parts.minute), dateKey: dateKeyFmt.format(date) };
+        }
+
+        function slotKey(date) {
+          const { weekdayIndex, minute } = nyClock(date);
+          const rounded = minute - (minute % 10);
+          return `${weekdayIndex}-${String(Math.floor(rounded / 60)).padStart(2, "0")}:${String(rounded % 60).padStart(2, "0")}`;
+        }
+
+        function clockLabel(minutes) {
+          return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+        }
+
         function median(numbers) {
           const ordered = [...numbers].sort((a, b) => a - b);
           const middle = Math.floor(ordered.length / 2);
@@ -302,9 +332,15 @@
           $("signal-copy").textContent = "No live count is shown until a valid public readings file is available. Refresh to retry.";
           $("chart-period").textContent = "Data unavailable";
           $("chart-empty").textContent = "Data unavailable. The public readings file could not be loaded or validated; refresh this page to retry.";
-          $("chart-caption").textContent = "No crowd chart is displayed while the public readings file is unavailable.";
+          $("chart-caption").textContent = "No comparison chart is displayed while the public readings file is unavailable.";
           $("heatmap-empty").textContent = "Data unavailable. Refresh this page to retry loading the public readings file.";
           $("heatmap").replaceChildren();
+          $("now-delta").hidden = true;
+          $("stat-now").textContent = "—";
+          $("stat-peak").textContent = "—";
+          $("stat-peak-note").textContent = "";
+          $("stat-quiet").textContent = "—";
+          $("stat-quiet-note").textContent = "";
           $("quiet-list").replaceChildren();
           $("quiet-empty").textContent = "Data unavailable. Refresh this page to retry loading the public readings file.";
           $("stability-strip").replaceChildren();
@@ -321,31 +357,106 @@
           return node;
         }
 
-        function chartRangeLabel(start, end) {
-          return `${fmt.format(start)} — ${fmt.format(end)}`;
+        function quantile(sorted, portion) {
+          return sorted[Math.min(sorted.length - 1, Math.floor(portion * (sorted.length - 1)))];
         }
 
-        function renderChart(readings) {
-          const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-          const data = readings.filter((reading) => reading.date.getTime() >= cutoff);
-          if (!data.length) return;
-          $("chart-empty").hidden = true;
+        function validBaselineFor(insights, key) {
+          const baseline = insights && insights.baselines && insights.baselines[key];
+          return baseline && Number.isFinite(baseline.median) && baseline.median > 0 && Number.isInteger(baseline.n) && baseline.n >= 2 ? baseline : null;
+        }
+
+        function renderNowDelta(readings, insights) {
+          const target = $("now-delta");
+          target.hidden = true;
+          const latest = readings.at(-1);
+          if (!latest) return;
+          const baseline = validBaselineFor(insights, slotKey(latest.date));
+          if (!baseline) return;
+          const delta = Math.round(((latest.occupancy - baseline.median) / baseline.median) * 100);
+          const strong = document.createElement("strong");
+          strong.textContent = delta === 0 ? "Right at typical" : `${delta > 0 ? "+" : ""}${delta}% vs typical`;
+          target.replaceChildren(strong, document.createTextNode(` — latest ${latest.occupancy} against a typical ${baseline.median} for this weekday and time`));
+          target.hidden = false;
+        }
+
+        function renderStatChips(readings, insights) {
+          const latest = readings.at(-1);
+          const baseline = latest ? validBaselineFor(insights, slotKey(latest.date)) : null;
+          const nowEl = $("stat-now");
+          if (latest && baseline) {
+            const delta = Math.round(((latest.occupancy - baseline.median) / baseline.median) * 100);
+            nowEl.textContent = delta === 0 ? "±0%" : `${delta > 0 ? "+" : ""}${delta}%`;
+          } else {
+            nowEl.textContent = "—";
+          }
+          const todayKey = dateKeyFmt.format(new Date());
+          const today = readings.filter((reading) => dateKeyFmt.format(reading.date) === todayKey);
+          const peakEl = $("stat-peak");
+          if (today.length) {
+            const peak = today.reduce((best, reading) => (reading.occupancy > best.occupancy ? reading : best));
+            peakEl.textContent = String(peak.occupancy);
+            $("stat-peak-note").textContent = shortTimeFmt.format(peak.date);
+          } else {
+            peakEl.textContent = "—";
+            $("stat-peak-note").textContent = "no readings yet today";
+          }
+          const plan = validTodayPlan(insights);
+          const quietEl = $("stat-quiet");
+          if (plan && plan.items.length) {
+            quietEl.textContent = Number.isInteger(plan.items[0].expected) ? String(plan.items[0].expected) : plan.items[0].expected.toFixed(1);
+            $("stat-quiet-note").textContent = `${plan.items[0].label} · expected`;
+          } else {
+            quietEl.textContent = "—";
+            $("stat-quiet-note").textContent = plan && plan.status === "closed" ? "club closed now" : "collecting history";
+          }
+        }
+
+        function renderTodayVsTypical(readings) {
+          const now = new Date();
+          const todayClock = nyClock(now);
+          const weekdayIndex = todayClock.weekdayIndex;
+          const [opens, closes] = OPEN_HOURS[weekdayIndex];
+          const priorDates = new Set();
+          const slotMap = new Map();
+          readings.forEach((reading) => {
+            const clock = nyClock(reading.date);
+            if (clock.weekdayIndex !== weekdayIndex || clock.dateKey === todayClock.dateKey) return;
+            priorDates.add(clock.dateKey);
+            const key = slotKey(reading.date);
+            const values = slotMap.get(key) || [];
+            values.push(reading.occupancy);
+            slotMap.set(key, values);
+          });
           const chart = $("occupancy-chart");
+          const empty = $("chart-empty");
+          if (!priorDates.size) {
+            empty.hidden = false;
+            empty.textContent = `No prior ${days[weekdayIndex]} recordings yet — the typical curve appears after this weekday has been recorded.`;
+            chart.hidden = true;
+            $("chart-period").textContent = `Awaiting ${days[weekdayIndex]} history`;
+            return;
+          }
+          const typical = [...slotMap.entries()].map(([key, values]) => {
+            const sorted = [...values].sort((a, b) => a - b);
+            const match = key.match(/-(\d{2}):(\d{2})$/);
+            return { minute: Number(match[1]) * 60 + Number(match[2]), median: median(values), low: quantile(sorted, .25), high: quantile(sorted, .75) };
+          }).sort((a, b) => a.minute - b.minute);
+          const today = readings.filter((reading) => nyClock(reading.date).dateKey === todayClock.dateKey).sort((a, b) => a.date - b.date);
+          empty.hidden = true;
           chart.hidden = false;
           chart.replaceChildren(svgEl("title", { id: "chart-title" }), svgEl("desc", { id: "chart-desc" }));
-          chart.querySelector("title").textContent = "Recorded occupancy over the last 24 hours";
-          const values = data.map((point) => point.occupancy);
+          chart.querySelector("title").textContent = `Today’s recorded occupancy against a typical ${days[weekdayIndex]}`;
+          const values = [...typical.flatMap((slot) => [slot.low, slot.high]), ...today.map((reading) => reading.occupancy)];
           const min = Math.min(...values);
           const max = Math.max(...values);
-          const start = Math.min(cutoff, data[0].date.getTime());
-          const end = Math.max(Date.now(), data.at(-1).date.getTime());
           const range = Math.max(max - min, 10);
           const pad = Math.max(4, Math.ceil(range * .12));
           const lower = Math.max(0, min - pad);
           const upper = max + pad;
-          const x = (time) => 58 + ((time - start) / Math.max(end - start, 1)) * 834;
+          const x = (minute) => 58 + ((minute - opens) / Math.max(closes - opens, 1)) * 834;
           const y = (value) => 252 - ((value - lower) / Math.max(upper - lower, 1)) * 202;
-          const desc = `${data.length} recorded readings from ${fmt.format(data[0].date)} to ${fmt.format(data.at(-1).date)}. Values range from ${min} to ${max}. Gaps longer than twenty minutes are not connected.`;
+          const desc = `Typical ${days[weekdayIndex]} from ${priorDates.size} recorded ${days[weekdayIndex]} date${priorDates.size === 1 ? "" : "s"}; today shows ${today.length} recorded reading${today.length === 1 ? "" : "s"}. The shaded band is the middle half of prior readings.`;
           chart.querySelector("desc").textContent = desc;
           [lower, Math.round((lower + upper) / 2), upper].forEach((value) => {
             const lineY = y(value);
@@ -355,25 +466,34 @@
             chart.append(label);
           });
           chart.append(svgEl("line", { x1: 58, x2: 892, y1: 252, y2: 252, stroke: "#11100e", "stroke-width": 1.5 }));
+          const band = [
+            ...typical.filter((slot) => slot.high !== slot.low).map((slot) => `${x(slot.minute).toFixed(1)},${y(slot.high).toFixed(1)}`),
+            ...[...typical].reverse().filter((slot) => slot.high !== slot.low).map((slot) => `${x(slot.minute).toFixed(1)},${y(slot.low).toFixed(1)}`),
+          ].join(" ");
+          if (typical.some((slot) => slot.high !== slot.low)) chart.append(svgEl("polygon", { points: band, fill: "rgba(163,153,136,.32)" }));
+          chart.append(svgEl("polyline", { points: typical.map((slot) => `${x(slot.minute).toFixed(1)},${y(slot.median).toFixed(1)}`).join(" "), fill: "none", stroke: "#24211e", "stroke-width": 2.5, "stroke-dasharray": "7 6", "stroke-linecap": "round" }));
           const cadenceTolerance = 20 * 60 * 1000;
-          const segments = data.reduce((all, point) => {
+          const segments = today.reduce((all, point) => {
             const current = all.at(-1);
             if (current.length && point.date.getTime() - current.at(-1).date.getTime() > cadenceTolerance) all.push([]);
             all.at(-1).push(point);
             return all;
           }, [[]]);
           segments.filter((segment) => segment.length > 1).forEach((segment) => {
-            const points = segment.map((point) => `${x(point.date.getTime()).toFixed(1)},${y(point.occupancy).toFixed(1)}`).join(" ");
+            const points = segment.map((point) => { const clock = nyClock(point.date); return `${x(clock.minute).toFixed(1)},${y(point.occupancy).toFixed(1)}`; }).join(" ");
             chart.append(svgEl("polyline", { points, fill: "none", stroke: "#ff5a1f", "stroke-width": 4, "stroke-linecap": "round", "stroke-linejoin": "round" }));
           });
-          data.forEach((point) => chart.append(svgEl("circle", { cx: x(point.date.getTime()), cy: y(point.occupancy), r: 3.5, fill: "#11100e", stroke: "#ff5a1f", "stroke-width": 2 })));
-          [data[0].date, data.at(-1).date].forEach((date, index) => {
+          segments.forEach((segment) => segment.forEach((point) => {
+            const clock = nyClock(point.date);
+            chart.append(svgEl("circle", { cx: x(clock.minute), cy: y(point.occupancy), r: 3.5, fill: "#11100e", stroke: "#ff5a1f", "stroke-width": 2 }));
+          }));
+          [opens, closes].forEach((minute, index) => {
             const label = svgEl("text", { x: index ? 892 : 58, y: 282, "text-anchor": index ? "end" : "start", fill: "#6c665d", "font-family": "Avenir Next, sans-serif", "font-size": 12 });
-            label.textContent = shortTimeFmt.format(date);
+            label.textContent = clockLabel(minute);
             chart.append(label);
           });
-          $("chart-period").textContent = chartRangeLabel(data[0].date, data.at(-1).date);
-          $("chart-caption").textContent = `${desc} Every point is a recorded public Crunch occupancy value; missing time is not estimated.`;
+          $("chart-period").textContent = `${days[weekdayIndex]} · typical from ${priorDates.size} date${priorDates.size === 1 ? "" : "s"}`;
+          $("chart-caption").textContent = `The dashed curve is the recorded median ${days[weekdayIndex]} across ${priorDates.size} independent local date${priorDates.size === 1 ? "" : "s"}; the band is its middle half. Today’s orange line is the live record. Missing time is not estimated.`;
         }
 
         function renderHeatmap(history) {
@@ -663,16 +783,18 @@
 
         if (globalThis.__CROWD_DESK_TEST_HOOKS__) {
           Object.assign(globalThis.__CROWD_DESK_TEST_HOOKS__, {
-            chartRangeLabel,
             validRecommendationProgress,
             validWeatherProgress,
             validQuietDetails,
             validTodayPlan,
             validWeekdayProfile,
+            validBaselineFor,
             validMonthlyStability,
             validFactorContext,
             renderTodayPlan,
             renderDayStrip,
+            renderNowDelta,
+            renderStatChips,
             renderQuietPlanner,
             renderMonthlyStability,
             renderFactors,
@@ -694,8 +816,10 @@
           const readings = csv.readings;
           const insights = insightsResult.status === "fulfilled" ? parseInsights(insightsResult.value) : {};
           renderLatest(readings, insights);
+          renderNowDelta(readings, insights);
+          renderStatChips(readings, insights);
+          renderTodayVsTypical(readings);
           renderTodayPlan(insights);
-          renderChart(readings);
           const history = hourlyHistory(readings);
           renderHeatmap(history);
           renderQuietPlanner(insights);

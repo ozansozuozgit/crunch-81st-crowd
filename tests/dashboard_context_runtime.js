@@ -11,10 +11,12 @@ class Element {
 }
 
 const ids = [
-  "latest-count", "latest-unit", "latest-time", "signal-state", "signal-copy",
+  "latest-count", "latest-unit", "latest-time", "now-delta", "signal-state", "signal-copy",
   "chart-period", "chart-empty", "chart-caption", "heatmap-empty", "heatmap",
-  "quiet-list", "quiet-empty", "stability-strip", "stability-empty", "factor-weather",
-  "factor-holidays", "factor-schedule", "schedule-source", "schedule-context", "updated-at", "announce",
+  "stat-now", "stat-now-note", "stat-peak", "stat-peak-note", "stat-quiet", "stat-quiet-note",
+  "today-list", "today-empty", "today-caption", "today-mode",
+  "quiet-list", "quiet-empty", "stability-strip", "stability-empty", "day-strip", "day-empty",
+  "factor-weather", "factor-holidays", "updated-at", "announce",
 ];
 const elements = new Map(ids.map((id) => [id, new Element()]));
 const page = fs.readFileSync("docs/index.html", "utf8");
@@ -34,16 +36,14 @@ const context = {
 context.globalThis = context;
 vm.runInNewContext(script, context);
 
-const overnightRange = hooks.chartRangeLabel(new Date("2026-08-20T03:30:00Z"), new Date("2026-08-20T05:30:00Z"));
-assert.match(overnightRange, /Wed, Aug 19/);
-assert.match(overnightRange, /Thu, Aug 20/);
-
 const readyInsights = {
+  baselines: { "0-18:00": { median: 25, n: 4 } },
+  today_plan: { status: "ready", local_date: "2026-08-24", items: [{ slot: "0-18:00", expected_occupancy: 25, independent_dates: 4 }] },
+  weekday_profile: [{ weekday_index: 5, weekday: "Sat", typical_daily_occupancy: 274, independent_dates: 2 }],
   quiet_window_details: { status: "ready", items: [{ slot: "0-18:00", baseline_occupancy: 25, independent_dates: 4, independent_weeks: 2, spread: 10 }] },
   monthly_stability: { status: "ready", items: [{ slot: "0-18:00", independent_weeks: 2, week_spread: 8 }] },
-  factor_context: { holiday_dates: 1, non_holiday_dates: 8, weather_progress: { status: "collecting", rainy_dates: 2, dry_dates: 3, required_dates_per_group: 20 }, class_schedule_status: "fresh" },
+  factor_context: { holiday_dates: 1, non_holiday_dates: 8, weather_progress: { status: "collecting", rainy_dates: 2, dry_dates: 3, required_dates_per_group: 20 } },
   correlations: { status: "insufficient_data" },
-  class_schedule: { status: "fresh", source_url: "https://class-prod.crunch.com/week_schedule.pdf?club_id=40", fetched_at: "2026-08-20T08:48:33Z" },
 };
 
 const details = hooks.validQuietDetails(readyInsights);
@@ -59,6 +59,45 @@ hooks.renderQuietPlanner({ quiet_window_details: { status: "insufficient_data", 
 assert.match(elements.get("quiet-empty").textContent, /3 \/ 4/);
 assert.equal(elements.get("quiet-list").children.length, 0);
 
+const plan = hooks.validTodayPlan(readyInsights);
+assert.equal(plan.status, "ready");
+assert.equal(plan.items.length, 1);
+assert.equal(plan.items[0].label, "Mon · 18:00–19:00 ET");
+assert.equal(hooks.validTodayPlan({ today_plan: { ...readyInsights.today_plan, items: [{ ...readyInsights.today_plan.items[0], expected_occupancy: "25" }] } }), null);
+hooks.renderTodayPlan(readyInsights);
+assert.equal(elements.get("today-empty").hidden, true);
+assert.match(elements.get("today-list").textContent, /independent date/);
+hooks.renderTodayPlan({ today_plan: { status: "closed", local_date: "2026-08-24", items: [] } });
+assert.match(elements.get("today-empty").textContent, /closed/i);
+hooks.renderTodayPlan({ today_plan: { status: "provisional", local_date: "2026-08-24", items: [{ slot: "0-18:00", expected_occupancy: 25, independent_dates: 2 }] } });
+assert.match(elements.get("today-mode").textContent, /Early sample/);
+assert.match(elements.get("today-caption").textContent, /fewer than four independent local dates/);
+
+const profile = hooks.validWeekdayProfile(readyInsights);
+assert.equal(profile.length, 1);
+assert.equal(profile[0].typical, 274);
+assert.equal(hooks.validWeekdayProfile({ weekday_profile: [{ weekday_index: 5, weekday: "Mon", typical_daily_occupancy: 274, independent_dates: 2 }] }).length, 0);
+hooks.renderDayStrip(readyInsights);
+assert.equal(elements.get("day-empty").hidden, true);
+assert.match(elements.get("day-strip").textContent, /typical day level 274/);
+hooks.renderDayStrip({ weekday_profile: [] });
+assert.equal(elements.get("day-empty").hidden, false);
+
+assert.equal(hooks.validBaselineFor(readyInsights, "0-18:00").median, 25);
+assert.equal(hooks.validBaselineFor(readyInsights, "1-18:00"), null);
+assert.equal(hooks.validBaselineFor({ baselines: { "0-18:00": { median: 25, n: 1 } } }, "0-18:00"), null);
+const reading = { occupancy: 30, date: new Date("2026-08-24T18:02:00-04:00") };
+hooks.renderNowDelta([reading], readyInsights);
+assert.equal(elements.get("now-delta").hidden, false);
+assert.match(elements.get("now-delta").textContent, /\+20% vs typical/);
+hooks.renderNowDelta([reading], { baselines: {} });
+assert.equal(elements.get("now-delta").hidden, true);
+
+hooks.renderStatChips([reading], readyInsights);
+assert.equal(elements.get("stat-now").textContent, "+20%");
+assert.equal(elements.get("stat-peak").textContent, "30");
+assert.equal(elements.get("stat-quiet").textContent, "25");
+
 const stability = hooks.validMonthlyStability(readyInsights, details);
 assert.equal(stability.length, 1);
 assert.equal(hooks.validMonthlyStability({ ...readyInsights, monthly_stability: { status: "ready", items: [{ slot: "1-18:00", independent_weeks: 2, week_spread: 8 }] } }, details).length, 0);
@@ -72,31 +111,24 @@ assert.equal(hooks.validFactorContext({ factor_context: { ...readyInsights.facto
 hooks.renderFactors(readyInsights);
 assert.match(elements.get("factor-weather").textContent, /2 rainy \/ 20/);
 assert.match(elements.get("factor-holidays").textContent, /1 holiday local date/);
-assert.match(elements.get("factor-schedule").textContent, /fresh/);
 
 const weatherUnavailable = {
   ...readyInsights,
   factor_context: {
     ...readyInsights.factor_context,
     weather_progress: { status: "unavailable", rainy_dates: 0, dry_dates: 0, required_dates_per_group: 20 },
-    class_schedule_status: "stale",
   },
 };
 assert.equal(hooks.validFactorContext(weatherUnavailable).weather.status, "unavailable");
 hooks.renderFactors(weatherUnavailable);
-assert.match(elements.get("factor-weather").textContent, /Weather context is unavailable/);
+assert.match(elements.get("factor-weather").textContent, /Daily local weather is being recorded/);
 assert.match(elements.get("factor-holidays").textContent, /1 holiday local date/);
-assert.match(elements.get("factor-schedule").textContent, /stale/);
-
-hooks.renderScheduleContext(readyInsights);
-assert.equal(elements.get("schedule-context").hidden, false);
-assert.match(elements.get("schedule-source").textContent, /last verified/);
-assert.equal(hooks.validClassSchedule({ class_schedule: { ...readyInsights.class_schedule, source_url: "http://class-prod.crunch.com/week_schedule.pdf" } }), null);
-const stale = { ...readyInsights, class_schedule: { ...readyInsights.class_schedule, status: "stale", last_attempt_at: "2026-08-20T09:48:33Z" } };
-hooks.renderScheduleContext(stale);
-assert.match(elements.get("schedule-source").textContent, /retained schedule may be out of date/);
 
 hooks.renderUnavailable();
 assert.equal(elements.get("quiet-list").children.length, 0);
 assert.equal(elements.get("stability-strip").children.length, 0);
-assert.equal(elements.get("schedule-context").hidden, true);
+assert.equal(elements.get("now-delta").hidden, true);
+assert.equal(elements.get("stat-now").textContent, "—");
+assert.equal(elements.get("stat-quiet").textContent, "—");
+
+console.log("dashboard runtime contracts OK");
