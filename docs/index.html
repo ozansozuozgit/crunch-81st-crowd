@@ -198,7 +198,7 @@
           <div class="section-heading"><h2 id="pattern-heading">When it gets crowded</h2><p>Typical week, hour by hour</p></div>
           <div class="paper">
             <div class="heatmap-scroll">
-              <table class="heatmap" id="heatmap"><caption class="sr-only">Historical median occupancy by weekday and New York hour</caption></table>
+              <table class="heatmap" id="heatmap"><caption class="sr-only">Typical walk-ins per hour by weekday in New York</caption></table>
             </div>
             <div class="heatmap-key" aria-hidden="true"><span>Lower</span><span class="key-gradient"></span><span>Higher</span></div>
             <p class="empty-note" id="heatmap-empty">No readings have been collected yet.</p>
@@ -304,9 +304,39 @@
         }
 
         function slotKey(date) {
-          const { weekdayIndex, minute } = nyClock(date);
-          const rounded = minute - (minute % 10);
-          return `${weekdayIndex}-${String(Math.floor(rounded / 60)).padStart(2, "0")}:${String(rounded % 60).padStart(2, "0")}`;
+          const { weekdayIndex, hour } = nyClock(date);
+          return `${weekdayIndex}-${String(hour).padStart(2, "0")}`;
+        }
+
+        function clockLabel12(hour) {
+          const suffix = hour < 12 ? "AM" : "PM";
+          const h12 = hour % 12 || 12;
+          return `${h12} ${suffix}`;
+        }
+
+        function hourlyVisits(readings) {
+          const visits = [];
+          for (let index = 1; index < readings.length; index += 1) {
+            const before = nyClock(readings[index - 1].date);
+            const after = nyClock(readings[index].date);
+            if (before.dateKey !== after.dateKey) continue;
+            visits.push({ dateKey: after.dateKey, weekdayIndex: after.weekdayIndex, hour: after.hour, visits: Math.max(0, readings[index].occupancy - readings[index - 1].occupancy) });
+          }
+          return visits;
+        }
+
+        function medianVisitHistory(readings) {
+          const buckets = new Map();
+          hourlyVisits(readings).forEach((entry) => {
+            const key = `${entry.weekdayIndex}-${entry.hour}`;
+            const values = buckets.get(key) || [];
+            values.push(entry.visits);
+            buckets.set(key, values);
+          });
+          return [...buckets.entries()].map(([key, values]) => {
+            const [weekdayIndex, hour] = key.split("-").map(Number);
+            return { weekdayIndex, hour, median: median(values), n: values.length };
+          });
         }
 
         function clockLabel(minutes) {
@@ -319,29 +349,16 @@
           return ordered.length % 2 ? ordered[middle] : (ordered[middle - 1] + ordered[middle]) / 2;
         }
 
-        function hourlyHistory(readings) {
-          const buckets = new Map();
-          readings.forEach((reading) => {
-            const { weekdayIndex, hour } = nyParts(reading.date);
-            if (weekdayIndex < 0 || !Number.isInteger(hour)) return;
-            const key = `${weekdayIndex}-${hour}`;
-            const entry = buckets.get(key) || { weekdayIndex, hour, readings: [] };
-            entry.readings.push(reading.occupancy);
-            buckets.set(key, entry);
-          });
-          return [...buckets.values()].map((entry) => ({ ...entry, median: median(entry.readings), n: entry.readings.length }));
-        }
-
         function renderLatest(readings, insights) {
           const latest = readings.at(-1);
           if (!latest) return;
           $("latest-count").textContent = String(latest.occupancy);
-          $("latest-unit").textContent = "people, measured";
+          $("latest-unit").textContent = "check-ins today";
           const measured = document.createElement("strong");
           measured.textContent = fmt.format(latest.date);
           $("latest-time").replaceChildren("Measured ", measured);
           $("signal-state").textContent = latest.status ? `${latest.status}\nrecorded` : "Reading\nrecorded";
-          $("signal-copy").textContent = "Measured a few minutes ago — not a guess.";
+          $("signal-copy").textContent = "Crunch’s counter totals visits since opening — not people in the room.";
           const generated = safeDate(insights.generated_at);
           $("updated-at").textContent = generated ? `Insights generated: ${fmt.format(generated)}` : `Latest measurement: ${fmt.format(latest.date)}`;
         }
@@ -388,15 +405,6 @@
           return baseline && Number.isFinite(baseline.median) && baseline.median > 0 && Number.isInteger(baseline.n) && baseline.n >= 2 ? baseline : null;
         }
 
-        function friendlyWindow(label) {
-          const match = typeof label === "string" && label.match(/(\d{2}):(\d{2})–(\d{2}):(\d{2})/);
-          if (!match) return null;
-          const to12 = (hour, minute) => { const h = Number(hour) % 24; const suffix = h < 12 ? "AM" : "PM"; const h12 = h % 12 || 12; return { text: minute === "00" ? String(h12) : `${h12}:${minute}`, suffix }; };
-          const start = to12(match[1], match[2]);
-          const end = to12(match[3], match[4]);
-          return start.suffix === end.suffix ? `${start.text}–${end.text} ${end.suffix}` : `${start.text} ${start.suffix}–${end.text} ${end.suffix}`;
-        }
-
         function renderVerdict(readings, insights) {
           const line = $("verdict-line");
           const sub = $("verdict-sub");
@@ -417,43 +425,42 @@
             return;
           }
           const best = plan.items[0];
-          const window = friendlyWindow(best.label) || best.label;
           const weekday = days[Number(best.slot.split("-")[0])];
-          line.textContent = `Go around ${window}`;
-          sub.textContent = `Usually about ${Number.isInteger(best.expected) ? best.expected : Math.round(best.expected)} people then — the emptiest time left today · based on ${best.dates} ${weekday}${best.dates === 1 ? "" : "s"} of data${plan.status === "provisional" ? " · early data, may shift" : ""}`;
+          line.textContent = `Go around ${best.label.replace(/^[A-Za-z]{3} · /, "")}`;
+          sub.textContent = `Usually only about ${Math.round(best.expected)} walk-ins that hour — the quietest time left today · based on ${best.dates} ${weekday}${best.dates === 1 ? "" : "s"} of data${plan.status === "provisional" ? " · early data, may shift" : ""}`;
         }
 
         function renderNowDelta(readings, insights) {
           const target = $("now-delta");
           target.hidden = true;
-          const latest = readings.at(-1);
-          if (!latest) return;
-          const baseline = validBaselineFor(insights, slotKey(latest.date));
-          if (!baseline) return;
-          const delta = Math.round(((latest.occupancy - baseline.median) / baseline.median) * 100);
+          const comparison = insights && insights.now_comparison;
+          if (!comparison || !Number.isFinite(comparison.visits) || !Number.isFinite(comparison.typical) || comparison.typical <= 0) return;
+          const delta = Math.round(((comparison.visits - comparison.typical) / comparison.typical) * 100);
           const strong = document.createElement("strong");
-          strong.textContent = delta === 0 ? "Right at typical" : `${delta > 0 ? "+" : ""}${delta}% vs typical`;
-          target.replaceChildren(strong, document.createTextNode(` — ${latest.occupancy} now vs about ${Math.round(baseline.median)} on a normal day at this time`));
+          strong.textContent = delta === 0 ? "Right at normal" : `${delta > 0 ? "+" : ""}${delta}% vs normal`;
+          target.replaceChildren(strong, document.createTextNode(` — about ${comparison.visits} walk-ins in the last hour vs a normal ${Math.round(comparison.typical)}`));
           target.hidden = false;
         }
 
         function renderStatChips(readings, insights) {
-          const latest = readings.at(-1);
-          const baseline = latest ? validBaselineFor(insights, slotKey(latest.date)) : null;
+          const comparison = insights && insights.now_comparison;
           const nowEl = $("stat-now");
-          if (latest && baseline) {
-            const delta = Math.round(((latest.occupancy - baseline.median) / baseline.median) * 100);
+          const nowNote = $("stat-now-note");
+          if (comparison && Number.isFinite(comparison.typical) && comparison.typical > 0) {
+            const delta = Math.round(((comparison.visits - comparison.typical) / comparison.typical) * 100);
             nowEl.textContent = delta === 0 ? "±0%" : `${delta > 0 ? "+" : ""}${delta}%`;
+            nowNote.textContent = `walk-ins last hour vs a normal ${Math.round(comparison.typical)}`;
           } else {
             nowEl.textContent = "—";
+            nowNote.textContent = "needs a few more days of data";
           }
           const todayKey = dateKeyFmt.format(new Date());
-          const today = readings.filter((reading) => dateKeyFmt.format(reading.date) === todayKey);
+          const todayVisits = hourlyVisits(readings).filter((entry) => entry.dateKey === todayKey && entry.visits > 0);
           const peakEl = $("stat-peak");
-          if (today.length) {
-            const peak = today.reduce((best, reading) => (reading.occupancy > best.occupancy ? reading : best));
-            peakEl.textContent = String(peak.occupancy);
-            $("stat-peak-note").textContent = shortTimeFmt.format(peak.date);
+          if (todayVisits.length) {
+            const peak = todayVisits.reduce((best, entry) => (entry.visits > best.visits ? entry : best));
+            peakEl.textContent = clockLabel12(peak.hour);
+            $("stat-peak-note").textContent = `busiest — about ${peak.visits} walk-ins that hour`;
           } else {
             peakEl.textContent = "—";
             $("stat-peak-note").textContent = "no readings yet today";
@@ -461,8 +468,8 @@
           const plan = validTodayPlan(insights);
           const quietEl = $("stat-quiet");
           if (plan && plan.items.length) {
-            quietEl.textContent = Number.isInteger(plan.items[0].expected) ? String(plan.items[0].expected) : plan.items[0].expected.toFixed(1);
-            $("stat-quiet-note").textContent = `${plan.items[0].label} · about ${Number.isInteger(plan.items[0].expected) ? plan.items[0].expected : plan.items[0].expected.toFixed(0)} people`;
+            quietEl.textContent = `~${Math.round(plan.items[0].expected)}`;
+            $("stat-quiet-note").textContent = `${plan.items[0].label} · walk-ins that hour`;
           } else {
             quietEl.textContent = "—";
             $("stat-quiet-note").textContent = plan && plan.status === "closed" ? "the gym is closed" : "needs a few more days";
@@ -476,13 +483,12 @@
           const [opens, closes] = OPEN_HOURS[weekdayIndex];
           const priorDates = new Set();
           const slotMap = new Map();
-          readings.forEach((reading) => {
-            const clock = nyClock(reading.date);
-            if (clock.weekdayIndex !== weekdayIndex || clock.dateKey === todayClock.dateKey) return;
-            priorDates.add(clock.dateKey);
-            const key = slotKey(reading.date);
+          hourlyVisits(readings).forEach((entry) => {
+            if (entry.weekdayIndex !== weekdayIndex || entry.dateKey === todayClock.dateKey) return;
+            priorDates.add(entry.dateKey);
+            const key = `${entry.weekdayIndex}-${entry.hour}`;
             const values = slotMap.get(key) || [];
-            values.push(reading.occupancy);
+            values.push(entry.visits);
             slotMap.set(key, values);
           });
           const chart = $("occupancy-chart");
@@ -496,24 +502,23 @@
           }
           const typical = [...slotMap.entries()].map(([key, values]) => {
             const sorted = [...values].sort((a, b) => a - b);
-            const match = key.match(/-(\d{2}):(\d{2})$/);
-            return { minute: Number(match[1]) * 60 + Number(match[2]), median: median(values), low: quantile(sorted, .25), high: quantile(sorted, .75) };
-          }).sort((a, b) => a.minute - b.minute);
-          const today = readings.filter((reading) => nyClock(reading.date).dateKey === todayClock.dateKey).sort((a, b) => a.date - b.date);
+            return { hour: Number(key.split("-")[1]), median: median(values), low: quantile(sorted, .25), high: quantile(sorted, .75) };
+          }).sort((a, b) => a.hour - b.hour);
+          const today = hourlyVisits(readings).filter((entry) => entry.dateKey === todayClock.dateKey).sort((a, b) => a.hour - b.hour);
           empty.hidden = true;
           chart.hidden = false;
           chart.replaceChildren(svgEl("title", { id: "chart-title" }), svgEl("desc", { id: "chart-desc" }));
-          chart.querySelector("title").textContent = `Today’s recorded occupancy against a typical ${days[weekdayIndex]}`;
-          const values = [...typical.flatMap((slot) => [slot.low, slot.high]), ...today.map((reading) => reading.occupancy)];
+          chart.querySelector("title").textContent = `Walk-ins per hour today against a normal ${days[weekdayIndex]}`;
+          const values = [...typical.flatMap((slot) => [slot.low, slot.high]), ...today.map((entry) => entry.visits)];
           const min = Math.min(...values);
           const max = Math.max(...values);
-          const range = Math.max(max - min, 10);
-          const pad = Math.max(4, Math.ceil(range * .12));
+          const range = Math.max(max - min, 5);
+          const pad = Math.max(2, Math.ceil(range * .12));
           const lower = Math.max(0, min - pad);
           const upper = max + pad;
-          const x = (minute) => 58 + ((minute - opens) / Math.max(closes - opens, 1)) * 834;
+          const x = (hour) => 58 + ((hour * 60 - opens) / Math.max(closes - opens, 1)) * 834 + 12;
           const y = (value) => 252 - ((value - lower) / Math.max(upper - lower, 1)) * 202;
-          const desc = `Dashed line: a normal ${days[weekdayIndex]}, from ${priorDates.size} recorded ${days[weekdayIndex]}${priorDates.size === 1 ? "" : "s"}. Orange line: today, ${today.length} reading${today.length === 1 ? "" : "s"} so far.`;
+          const desc = `Walk-ins per hour. Dashed line: a normal ${days[weekdayIndex]}, from ${priorDates.size} recorded ${days[weekdayIndex]}${priorDates.size === 1 ? "" : "s"}. Orange line: today, ${today.reduce((sum, entry) => sum + entry.visits, 0)} walk-ins so far.`;
           chart.querySelector("desc").textContent = desc;
           [lower, Math.round((lower + upper) / 2), upper].forEach((value) => {
             const lineY = y(value);
@@ -524,33 +529,23 @@
           });
           chart.append(svgEl("line", { x1: 58, x2: 892, y1: 252, y2: 252, stroke: "#1c1a16", "stroke-width": 1.5 }));
           const band = [
-            ...typical.filter((slot) => slot.high !== slot.low).map((slot) => `${x(slot.minute).toFixed(1)},${y(slot.high).toFixed(1)}`),
-            ...[...typical].reverse().filter((slot) => slot.high !== slot.low).map((slot) => `${x(slot.minute).toFixed(1)},${y(slot.low).toFixed(1)}`),
+            ...typical.filter((slot) => slot.high !== slot.low).map((slot) => `${x(slot.hour).toFixed(1)},${y(slot.high).toFixed(1)}`),
+            ...[...typical].reverse().filter((slot) => slot.high !== slot.low).map((slot) => `${x(slot.hour).toFixed(1)},${y(slot.low).toFixed(1)}`),
           ].join(" ");
           if (typical.some((slot) => slot.high !== slot.low)) chart.append(svgEl("polygon", { points: band, fill: "rgba(163,153,136,.32)" }));
-          chart.append(svgEl("polyline", { points: typical.map((slot) => `${x(slot.minute).toFixed(1)},${y(slot.median).toFixed(1)}`).join(" "), fill: "none", stroke: "#1c1a16", "stroke-width": 2.5, "stroke-dasharray": "7 6", "stroke-linecap": "round" }));
-          const cadenceTolerance = 20 * 60 * 1000;
-          const segments = today.reduce((all, point) => {
-            const current = all.at(-1);
-            if (current.length && point.date.getTime() - current.at(-1).date.getTime() > cadenceTolerance) all.push([]);
-            all.at(-1).push(point);
-            return all;
-          }, [[]]);
-          segments.filter((segment) => segment.length > 1).forEach((segment) => {
-            const points = segment.map((point) => { const clock = nyClock(point.date); return `${x(clock.minute).toFixed(1)},${y(point.occupancy).toFixed(1)}`; }).join(" ");
-            chart.append(svgEl("polyline", { points, fill: "none", stroke: "#e04a0e", "stroke-width": 4, "stroke-linecap": "round", "stroke-linejoin": "round" }));
-          });
-          segments.forEach((segment) => segment.forEach((point) => {
-            const clock = nyClock(point.date);
-            chart.append(svgEl("circle", { cx: x(clock.minute), cy: y(point.occupancy), r: 3.5, fill: "#1c1a16", stroke: "#e04a0e", "stroke-width": 2 }));
-          }));
-          [opens, closes].forEach((minute, index) => {
+          chart.append(svgEl("polyline", { points: typical.map((slot) => `${x(slot.hour).toFixed(1)},${y(slot.median).toFixed(1)}`).join(" "), fill: "none", stroke: "#1c1a16", "stroke-width": 2.5, "stroke-dasharray": "7 6", "stroke-linecap": "round" }));
+          const points = today.map((entry) => `${x(entry.hour).toFixed(1)},${y(entry.visits).toFixed(1)}`).join(" ");
+          if (today.length > 1) chart.append(svgEl("polyline", { points, fill: "none", stroke: "#e04a0e", "stroke-width": 4, "stroke-linecap": "round", "stroke-linejoin": "round" }));
+          today.forEach((entry) => chart.append(svgEl("circle", { cx: x(entry.hour), cy: y(entry.visits), r: 4, fill: "#1c1a16", stroke: "#e04a0e", "stroke-width": 2 })));
+          const openHour = Math.floor(opens / 60);
+          const closeHour = Math.ceil(closes / 60);
+          [openHour, closeHour].forEach((hour, index) => {
             const label = svgEl("text", { x: index ? 892 : 58, y: 282, "text-anchor": index ? "end" : "start", fill: "#6f6a5f", "font-family": "Inter, sans-serif", "font-size": 12 });
-            label.textContent = clockLabel(minute);
+            label.textContent = clockLabel12(hour);
             chart.append(label);
           });
           $("chart-period").textContent = `Normal ${days[weekdayIndex]}, from ${priorDates.size} ${days[weekdayIndex]}${priorDates.size === 1 ? "" : "s"}`;
-          $("chart-caption").textContent = `Dashed line = a normal ${days[weekdayIndex]}. Orange line = today so far. The shaded band is the normal range — it appears once 2+ ${days[weekdayIndex]}s are on record.`;
+          $("chart-caption").textContent = `Walk-ins per hour. Dashed line = a normal ${days[weekdayIndex]}. Orange line = today so far. The shaded band is the normal range — it appears once 2+ ${days[weekdayIndex]}s are on record.`;
         }
 
         function renderHeatmap(history) {
@@ -579,7 +574,7 @@
                 const hue = Math.round(40 - ratio * 27);
                 const light = Math.round(89 - ratio * 52);
                 cell.style.backgroundColor = `hsl(${hue} 95% ${light}%)`;
-                cell.title = `${day} ${hour}:00 — median ${entry.median}, ${entry.n} recorded sample${entry.n === 1 ? "" : "s"}`;
+                cell.title = `${day} ${clockLabel12(hour)} — about ${entry.median} walk-ins, from ${entry.n} day${entry.n === 1 ? "" : "s"}`;
                 cell.setAttribute("aria-label", cell.title);
               }
               row.append(cell);
@@ -590,20 +585,18 @@
         }
 
         function parseRecommendationSlot(slot) {
-          const match = typeof slot === "string" && slot.match(/^([0-6])-(\d{2}):([0-5]\d)$/);
+          const match = typeof slot === "string" && slot.match(/^([0-6])-(\d{2})$/);
           if (!match) return null;
           const weekdayIndex = Number(match[1]);
           const hour = Number(match[2]);
-          const minute = Number(match[3]);
-          return hour < 24 ? { weekdayIndex, hour, minute } : null;
+          return hour < 24 ? { weekdayIndex, hour } : null;
         }
 
         function recommendationWindowLabel(slot) {
           const parsed = parseRecommendationSlot(slot);
           if (!parsed) return null;
-          const startMinutes = parsed.hour * 60 + parsed.minute;
-          const clock = (minutes) => `${String(Math.floor((minutes % 1440) / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
-          return `${days[parsed.weekdayIndex]} · ${clock(startMinutes)}–${clock(startMinutes + 60)} ET`;
+          const next = parsed.hour + 1;
+          return `${days[parsed.weekdayIndex]} · ${clockLabel12(parsed.hour)}–${clockLabel12(next)}`;
         }
 
         function validRecommendationProgress(insights) {
@@ -651,7 +644,7 @@
             const window = document.createElement("span"); window.className = "window"; window.textContent = recommendationWindowLabel(detail.slot);
             const evidence = document.createElement("small"); evidence.textContent = `${detail.independentDates} day${detail.independentDates === 1 ? "" : "s"} of data`; window.append(evidence);
             const number = document.createElement("span"); number.className = "median"; number.textContent = Number.isInteger(detail.baseline) ? String(detail.baseline) : detail.baseline.toFixed(1);
-            const numberLabel = document.createElement("small"); numberLabel.textContent = "typical"; number.append(numberLabel);
+            const numberLabel = document.createElement("small"); numberLabel.textContent = "per hour"; number.append(numberLabel);
             item.append(rank, window, number); list.append(item);
           });
         }
@@ -664,7 +657,7 @@
           const items = rawItems.map((item) => {
             if (!item || typeof item !== "object") return null;
             const label = recommendationWindowLabel(item.slot);
-            const expected = item.expected_occupancy;
+            const expected = item.expected_rate;
             const dates = item.independent_dates;
             return label && Number.isFinite(expected) && expected >= 0 && Number.isInteger(dates) && dates >= 1
               ? { slot: item.slot, label, expected, dates }
@@ -712,7 +705,7 @@
             const windowEl = document.createElement("span"); windowEl.className = "window"; windowEl.textContent = `${item.label} · expected`;
             const evidence = document.createElement("small"); evidence.textContent = `based on ${item.dates} day${item.dates === 1 ? "" : "s"} of data`; windowEl.append(evidence);
             const number = document.createElement("span"); number.className = "median"; number.textContent = Number.isInteger(item.expected) ? String(item.expected) : item.expected.toFixed(1);
-            const numberLabel = document.createElement("small"); numberLabel.textContent = "typical"; number.append(numberLabel);
+            const numberLabel = document.createElement("small"); numberLabel.textContent = "per hour"; number.append(numberLabel);
             li.append(rank, windowEl, number); list.append(li);
           });
         }
@@ -723,7 +716,7 @@
           const items = profile.map((item) => {
             if (!item || typeof item !== "object") return null;
             const weekdayIndex = item.weekday_index;
-            const typical = item.typical_daily_occupancy;
+            const typical = item.typical_daily_visits;
             const dates = item.independent_dates;
             return Number.isInteger(weekdayIndex) && weekdayIndex >= 0 && weekdayIndex < days.length && days[weekdayIndex] === item.weekday
               && Number.isFinite(typical) && typical >= 0 && Number.isInteger(dates) && dates >= 1
@@ -745,7 +738,7 @@
           items.forEach((item, index) => {
             const row = document.createElement("div"); row.className = "stability-item" + (index === 0 && items.length > 1 ? " is-best" : "");
             const label = document.createElement("strong"); label.textContent = item.weekday;
-            const detail = document.createElement("span"); detail.textContent = `usually about ${Number.isInteger(item.typical) ? String(item.typical) : item.typical.toFixed(0)} people · ${item.dates} day${item.dates === 1 ? "" : "s"} recorded`;
+            const detail = document.createElement("span"); detail.textContent = `usually about ${Math.round(item.typical)} check-in${Math.round(item.typical) === 1 ? "" : "s"} that day · ${item.dates} day${item.dates === 1 ? "" : "s"} recorded`;
             row.append(label, detail); strip.append(row);
           });
         }
@@ -779,7 +772,7 @@
           items.forEach((item) => {
             const row = document.createElement("div"); row.className = "stability-item";
             const label = document.createElement("strong"); label.textContent = recommendationWindowLabel(item.slot);
-            const detail = document.createElement("span"); detail.textContent = `varies by about ${item.weekSpread.toFixed(0)} people between weeks · ${item.independentWeeks} week${item.independentWeeks === 1 ? "" : "s"} of data`;
+            const detail = document.createElement("span"); detail.textContent = `varies by about ${Math.round(item.weekSpread)} walk-ins between weeks · ${item.independentWeeks} week${item.independentWeeks === 1 ? "" : "s"} of data`;
             row.append(label, detail); strip.append(row);
           });
         }
@@ -823,7 +816,7 @@
           const weatherCopy = weather.status === "unavailable"
             ? "We save the weather daily — a rain comparison comes once 20 rainy and 20 dry days pile up."
             : observed
-              ? `Observed association, not proof: rainy dates were recorded ${Math.abs(observed.effect).toFixed(1)} ${observed.effect >= 0 ? "higher" : "lower"} after the time-slot baseline.`
+              ? `Observed association, not proof: rainy days averaged about ${Math.round(Math.abs(observed.effect))} ${observed.effect >= 0 ? "more" : "fewer"} check-ins.`
               : `Rainy days recorded: ${weather.rainyDates} of 20 · dry days: ${weather.dryDates} of 20. Then we can compare.`;
           factorLine("factor-weather", "Weather", weatherCopy);
           factorLine("factor-holidays", "Holidays", `Recorded so far: ${context.holidayDates} holiday ${context.holidayDates === 1 ? "day" : "days"}, ${context.nonHolidayDates} regular ${context.nonHolidayDates === 1 ? "day" : "days"}.`);
@@ -879,7 +872,7 @@
           renderStatChips(readings, insights);
           renderTodayVsTypical(readings);
           renderTodayPlan(insights);
-          const history = hourlyHistory(readings);
+          const history = medianVisitHistory(readings);
           renderHeatmap(history);
           renderQuietPlanner(insights);
           renderDayStrip(insights);

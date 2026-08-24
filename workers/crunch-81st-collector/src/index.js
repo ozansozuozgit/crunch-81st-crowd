@@ -35,12 +35,62 @@ function localParts(timestamp) {
 
 function slotFor(timestamp) {
   const local = localParts(timestamp);
-  return local.weekday + "-" + String(local.hour).padStart(2, "0") + ":" + String(local.minute - (local.minute % 10)).padStart(2, "0");
+  return local.weekday + "-" + String(local.hour).padStart(2, "0");
 }
 
 export function parseSlotKey(slot) {
-  const match = typeof slot === "string" && slot.match(/^([0-6])-(\d{2}):([0-5]\d)$/);
-  return match ? { weekday: Number(match[1]), hour: Number(match[2]), minute: Number(match[3]) } : null;
+  const match = typeof slot === "string" && slot.match(/^([0-6])-(\d{2})$/);
+  const hour = match ? Number(match[2]) : -1;
+  return match && hour < 24 ? { weekday: Number(match[1]), hour } : null;
+}
+
+export function hourlyVisits(rows) {
+  const visits = [];
+  for (let index = 1; index < rows.length; index += 1) {
+    const before = localParts(rows[index - 1].timestamp_utc);
+    const after = localParts(rows[index].timestamp_utc);
+    if (before.date !== after.date) continue;
+    visits.push({ date: after.date, weekday: after.weekday, hour: after.hour, visits: Math.max(0, rows[index].occupancy - rows[index - 1].occupancy) });
+  }
+  return visits;
+}
+
+function groupHourly(rows) {
+  const result = new Map();
+  for (const row of hourlyVisits(rows)) {
+    const slot = row.weekday + "-" + String(row.hour).padStart(2, "0");
+    const perSlot = result.get(slot) || new Map();
+    perSlot.set(row.date, (perSlot.get(row.date) || 0) + row.visits);
+    result.set(slot, perSlot);
+  }
+  return result;
+}
+
+function recentVisits(rows, windowMinutes = 60) {
+  if (!rows.length) return { visits: 0, minutes: 0, until: null };
+  const until = rows[rows.length - 1];
+  const cutoff = new Date(until.timestamp_utc).getTime() - windowMinutes * 60000;
+  let visits = 0;
+  let minutes = 0;
+  for (let index = 1; index < rows.length; index += 1) {
+    const start = new Date(rows[index - 1].timestamp_utc).getTime();
+    const end = new Date(rows[index].timestamp_utc).getTime();
+    if (localParts(rows[index - 1].timestamp_utc).date !== localParts(rows[index].timestamp_utc).date || end <= cutoff) continue;
+    const overlapStart = Math.max(start, cutoff);
+    const fraction = (end - overlapStart) / Math.max(end - start, 1);
+    visits += Math.max(0, rows[index].occupancy - rows[index - 1].occupancy) * fraction;
+    minutes += (end - overlapStart) / 60000;
+  }
+  return { visits: Math.round(visits), minutes: Math.round(minutes), until: until.timestamp_utc };
+}
+
+function nowComparison(rows, baselines) {
+  const recent = recentVisits(rows);
+  if (!recent.until || recent.minutes < 20) return null;
+  const stamp = localParts(recent.until);
+  const baseline = baselines[stamp.weekday + "-" + String(stamp.hour).padStart(2, "0")];
+  if (!baseline) return null;
+  return { visits: recent.visits, minutes: recent.minutes, typical: Math.round(baseline.median), weekday: stamp.weekday, hour: stamp.hour };
 }
 
 function median(values) {
@@ -77,20 +127,6 @@ function holiday(dateString) {
   return [nth(1, 1, 3), nth(2, 1, 3), last(5, 1), nth(9, 1, 1), nth(10, 1, 2), nth(11, 4, 4)].some(same);
 }
 
-function groupDaily(rows) {
-  const result = new Map();
-  for (const row of rows) {
-    const slot = slotFor(row.timestamp_utc);
-    const date = localParts(row.timestamp_utc).date;
-    const perSlot = result.get(slot) || new Map();
-    const values = perSlot.get(date) || [];
-    values.push(row.occupancy);
-    perSlot.set(date, values);
-    result.set(slot, perSlot);
-  }
-  return result;
-}
-
 export function todayPlan(grouped, baselines, generatedAt) {
   const local = localParts(generatedAt);
   const minutes = local.hour * 60 + local.minute;
@@ -100,11 +136,11 @@ export function todayPlan(grouped, baselines, generatedAt) {
   for (const [slot, baseline] of Object.entries(baselines)) {
     const parsed = parseSlotKey(slot);
     if (!parsed || parsed.weekday !== local.weekday) continue;
-    const start = parsed.hour * 60 + parsed.minute;
-    if (start < minutes || start + 60 > closes) continue;
-    items.push({ slot, expected_occupancy: baseline.median, independent_dates: baseline.n });
+    const start = parsed.hour * 60;
+    if (start + 60 <= minutes || start >= closes) continue;
+    items.push({ slot, expected_rate: baseline.median, independent_dates: baseline.n });
   }
-  items.sort((a, b) => a.expected_occupancy - b.expected_occupancy || a.slot.localeCompare(b.slot));
+  items.sort((a, b) => a.expected_rate - b.expected_rate || a.slot.localeCompare(b.slot));
   const top = items.slice(0, 5);
   return { status: top.some((item) => item.independent_dates >= QUIET_DATES) ? "ready" : "provisional", local_date: local.date, items: top };
 }
@@ -114,38 +150,28 @@ export function weekdayProfile(grouped) {
   for (const [slot, dates] of grouped) {
     const parsed = parseSlotKey(slot);
     if (!parsed) continue;
-    const means = perWeekday[parsed.weekday];
-    for (const [date, values] of dates) {
-      const collected = means.get(date) || [];
-      collected.push(...values);
-      means.set(date, collected);
-    }
+    const totals = perWeekday[parsed.weekday];
+    for (const [date, visits] of dates) totals.set(date, (totals.get(date) || 0) + visits);
   }
   return perWeekday.flatMap((dates, weekday) => {
     if (!dates.size) return [];
-    const dailyMeans = [...dates.values()].map((values) => values.reduce((sum, value) => sum + value, 0) / values.length);
-    return [{ weekday_index: weekday, weekday: dayNames[weekday], typical_daily_occupancy: median(dailyMeans), independent_dates: dates.size }];
-  }).sort((a, b) => a.typical_daily_occupancy - b.typical_daily_occupancy);
+    const dailyTotals = [...dates.values()];
+    return [{ weekday_index: weekday, weekday: dayNames[weekday], typical_daily_visits: Math.round(median(dailyTotals)), independent_dates: dailyTotals.length }];
+  }).sort((a, b) => a.typical_daily_visits - b.typical_daily_visits);
 }
 
 export function summarizeWeather(rows, weatherRows) {
   const precipitationByDate = new Map((weatherRows || []).filter((row) => row && typeof row.local_date === "string" && Number.isFinite(row.precipitation_mm)).map((row) => [row.local_date, row.precipitation_mm]));
-  const dayValues = new Map();
-  for (const row of rows) {
-    const date = localParts(row.timestamp_utc).date;
-    const values = dayValues.get(date) || [];
-    values.push(row.occupancy);
-    dayValues.set(date, values);
-  }
+  const dayTotals = new Map();
+  for (const row of hourlyVisits(rows)) dayTotals.set(row.date, (dayTotals.get(row.date) || 0) + row.visits);
   let rainy = 0;
   let dry = 0;
   const rainyMeans = [];
   const dryMeans = [];
-  for (const [date, values] of dayValues) {
+  for (const [date, total] of dayTotals) {
     const precip = precipitationByDate.get(date);
     if (precip === undefined) continue;
-    const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
-    if (precip >= 1) { rainy += 1; rainyMeans.push(mean); } else { dry += 1; dryMeans.push(mean); }
+    if (precip >= 1) { rainy += 1; rainyMeans.push(total); } else { dry += 1; dryMeans.push(total); }
   }
   const progress = { rainy_dates: rainy, dry_dates: dry, required_dates_per_group: 20, status: rainy || dry ? "collecting" : "unavailable" };
   let correlations = { status: "insufficient_data" };
@@ -160,25 +186,25 @@ export function summarizeWeather(rows, weatherRows) {
 }
 
 export function buildInsights(rows, generatedAt = new Date().toISOString(), weatherRows = []) {
-  const grouped = groupDaily(rows);
+  const grouped = groupHourly(rows);
   const baselines = {};
   const candidates = [];
   let matchingDates = 0;
   for (const [slot, dates] of grouped) {
-    const daily = [...dates.entries()].map(([date, values]) => [date, values.reduce((sum, value) => sum + value, 0) / values.length]);
-    matchingDates = Math.max(matchingDates, daily.length);
-    const allValues = daily.map(([, value]) => value);
+    const entries = [...dates.entries()];
+    matchingDates = Math.max(matchingDates, entries.length);
+    const allValues = entries.map(([, visits]) => visits);
     baselines[slot] = { median: median(allValues), n: allValues.length };
-    if (daily.length < QUIET_DATES) continue;
+    if (entries.length < QUIET_DATES) continue;
     const weekValues = new Map();
-    for (const [date, value] of daily) {
+    for (const [date, value] of entries) {
       const week = isoWeek(date);
       const values = weekValues.get(week) || [];
       values.push(value);
       weekValues.set(week, values);
     }
     const weekly = [...weekValues.values()].map((values) => values.reduce((sum, value) => sum + value, 0) / values.length);
-    candidates.push({ slot, baseline_occupancy: median(allValues), independent_dates: daily.length, independent_weeks: weekly.length, spread: Math.max(...allValues) - Math.min(...allValues), week_spread: Math.max(...weekly) - Math.min(...weekly) });
+    candidates.push({ slot, baseline_occupancy: median(allValues), independent_dates: entries.length, independent_weeks: weekly.length, spread: Math.max(...allValues) - Math.min(...allValues), week_spread: Math.max(...weekly) - Math.min(...weekly) });
   }
   candidates.sort((a, b) => a.baseline_occupancy - b.baseline_occupancy || a.slot.localeCompare(b.slot));
   const items = candidates.slice(0, 5);
@@ -190,6 +216,7 @@ export function buildInsights(rows, generatedAt = new Date().toISOString(), weat
     generated_at: generatedAt,
     latest: rows.at(-1) || null,
     baselines,
+    now_comparison: nowComparison(rows, baselines),
     today_plan: todayPlan(grouped, baselines, generatedAt),
     weekday_profile: weekdayProfile(grouped),
     recommendations: items.map(({ slot, baseline_occupancy, independent_dates }) => ({ slot, baseline_occupancy, independent_dates })),

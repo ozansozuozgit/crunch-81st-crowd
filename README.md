@@ -32,6 +32,13 @@ The collector reads its numeric `current_occupancy` and its accompanying
 private Crunch endpoint. `max_occupancy` is deliberately excluded because the
 published value is not treated as a reliable capacity measure.
 
+The published counter is a **cumulative check-in total**, not a live headcount:
+it starts at zero at opening, only ever rises until close, and resets overnight
+(verified across every recorded day). The dashboard therefore reports
+**check-ins per hour** — the difference between consecutive readings — as its
+busyness signal, and treats the daily total as a measure of how busy a day
+was, not of how many people were inside at once.
+
 A Cloudflare Worker Cron requests a measurement every ten minutes at minutes **07, 17,
 27, 37, 47, and 57 UTC**. The collector separately checks the club's scheduled
 local opening hours, so closed periods produce no reading and no commit. GitHub

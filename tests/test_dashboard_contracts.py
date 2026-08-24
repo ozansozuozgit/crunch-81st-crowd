@@ -85,7 +85,7 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
             "Seen on ${progress.matchingDates} of 4 days needed — check back soon.",
             "Rainy days recorded: ${weather.rainyDates} of 20 · dry days: ${weather.dryDates} of 20. Then we can compare.",
             "Early data — these picks are based on fewer than 4 days and can still shift.",
-            "Go around ${window}",
+            "Go around ${best.label.replace",
             "reliably quiet",
             "Dashed line = a normal ${days[weekdayIndex]}",
         ):
