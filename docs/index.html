@@ -433,7 +433,7 @@
           const delta = Math.round(((latest.occupancy - baseline.median) / baseline.median) * 100);
           const strong = document.createElement("strong");
           strong.textContent = delta === 0 ? "Right at typical" : `${delta > 0 ? "+" : ""}${delta}% vs typical`;
-          target.replaceChildren(strong, document.createTextNode(` — ${latest.occupancy} now vs about ${baseline.median} on a normal day at this time`));
+          target.replaceChildren(strong, document.createTextNode(` — ${latest.occupancy} now vs about ${Math.round(baseline.median)} on a normal day at this time`));
           target.hidden = false;
         }
 
