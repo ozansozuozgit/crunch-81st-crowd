@@ -137,7 +137,7 @@ export function todayPlan(grouped, baselines, generatedAt) {
     const parsed = parseSlotKey(slot);
     if (!parsed || parsed.weekday !== local.weekday) continue;
     const start = parsed.hour * 60;
-    if (start + 60 <= minutes || start >= closes) continue;
+    if (start + 60 <= minutes || start >= closes - 60) continue; // skip hours that end within the final hour before close
     items.push({ slot, expected_rate: baseline.median, independent_dates: baseline.n });
   }
   items.sort((a, b) => a.expected_rate - b.expected_rate || a.slot.localeCompare(b.slot));

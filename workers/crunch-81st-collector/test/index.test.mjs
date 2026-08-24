@@ -139,8 +139,8 @@ test("today plan ranks remaining hours by fewest expected walk-ins", () => {
   assert.equal(insights.today_plan.local_date, "2026-08-24");
   const rates = insights.today_plan.items.map((item) => item.expected_rate);
   assert.deepEqual(rates, [...rates].sort((a, b) => a - b));
-  assert.equal(insights.today_plan.items[0].slot, "0-22"); // 10 PM: quietest remaining hour
-  assert.equal(insights.today_plan.items[0].expected_rate, 10);
+  assert.equal(insights.today_plan.items[0].slot, "0-21"); // 9 PM: quietest usable hour (the final hour before close is excluded)
+  assert.equal(insights.today_plan.items[0].expected_rate, 15);
 });
 
 test("today plan marks four independent dates as ready and is closed at night", () => {
