@@ -13,14 +13,15 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
 
     def test_go_now_regions_keep_the_page_compact(self):
         for contract in (
+            'id="verdict-line"',
             'id="today-heading">Go today',
-            'id="last24-heading">Today vs a typical day',
+            'id="last24-heading">Today vs a normal day',
             'id="stat-now"',
             'id="stat-peak"',
             'id="stat-quiet"',
-            'id="quiet-heading">Best quiet workout windows',
-            'id="pattern-heading">Week / hour pattern',
-            'id="factors-heading">What may matter',
+            'id="quiet-heading">Usually quietest',
+            'id="pattern-heading">When it gets crowded',
+            'id="factors-heading">What changes the crowds',
             'id="stability-strip"',
             'id="day-strip"',
         ):
@@ -59,6 +60,7 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
             "function renderFactors(insights)",
             "function renderTodayPlan(insights)",
             "function renderDayStrip(insights)",
+            "function renderVerdict(readings, insights)",
             "function renderNowDelta(readings, insights)",
             "function renderStatChips(readings, insights)",
             "function renderTodayVsTypical(readings)",
@@ -68,6 +70,7 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
             "renderFactors(insights);",
             "renderTodayPlan(insights);",
             "renderDayStrip(insights);",
+            "renderVerdict(readings, insights);",
             "renderNowDelta(readings, insights);",
             "renderStatChips(readings, insights);",
             "renderTodayVsTypical(readings);",
@@ -76,13 +79,15 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
 
     def test_planner_copy_is_evidence_bound_and_non_causal(self):
         for contract in (
-            "independent local dates",
-            "historical range",
-            "independent local weeks",
+            "days of data",
+            "between weeks",
             "Observed association, not proof",
-            "Tracking: ${progress.matchingDates} / 4 matching weekday-time observations.",
-            "Tracking: ${weather.rainyDates} rainy / 20 and ${weather.dryDates} dry / 20 independent dates.",
-            "fewer than four independent local dates behind them",
+            "Seen on ${progress.matchingDates} of 4 days needed — check back soon.",
+            "Rainy days recorded: ${weather.rainyDates} of 20 · dry days: ${weather.dryDates} of 20. Then we can compare.",
+            "Early data — these picks are based on fewer than 4 days and can still shift.",
+            "Go around ${window}",
+            "reliably quiet",
+            "Dashed line = a normal ${days[weekdayIndex]}",
         ):
             self.assertIn(contract, self.page)
 

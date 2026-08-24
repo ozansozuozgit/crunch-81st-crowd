@@ -13,6 +13,7 @@ class Element {
 const ids = [
   "latest-count", "latest-unit", "latest-time", "now-delta", "signal-state", "signal-copy",
   "chart-period", "chart-empty", "chart-caption", "heatmap-empty", "heatmap",
+  "verdict-line", "verdict-sub",
   "stat-now", "stat-now-note", "stat-peak", "stat-peak-note", "stat-quiet", "stat-quiet-note",
   "today-list", "today-empty", "today-caption", "today-mode",
   "quiet-list", "quiet-empty", "stability-strip", "stability-empty", "day-strip", "day-empty",
@@ -54,9 +55,9 @@ assert.equal(hooks.validQuietDetails({ quiet_window_details: { status: "ready", 
 
 hooks.renderQuietPlanner(readyInsights);
 assert.equal(elements.get("quiet-empty").hidden, true);
-assert.match(elements.get("quiet-list").textContent, /independent local dates/);
+assert.match(elements.get("quiet-list").textContent, /days of data/);
 hooks.renderQuietPlanner({ quiet_window_details: { status: "insufficient_data", items: [] }, recommendation_progress: { status: "collecting", matching_dates: 3, required_dates: 4 } });
-assert.match(elements.get("quiet-empty").textContent, /3 \/ 4/);
+assert.match(elements.get("quiet-empty").textContent, /3 of 4 days needed/);
 assert.equal(elements.get("quiet-list").children.length, 0);
 
 const plan = hooks.validTodayPlan(readyInsights);
@@ -66,20 +67,26 @@ assert.equal(plan.items[0].label, "Mon · 18:00–19:00 ET");
 assert.equal(hooks.validTodayPlan({ today_plan: { ...readyInsights.today_plan, items: [{ ...readyInsights.today_plan.items[0], expected_occupancy: "25" }] } }), null);
 hooks.renderTodayPlan(readyInsights);
 assert.equal(elements.get("today-empty").hidden, true);
-assert.match(elements.get("today-list").textContent, /independent date/);
+assert.match(elements.get("today-list").textContent, /based on 4 days of data/);
 hooks.renderTodayPlan({ today_plan: { status: "closed", local_date: "2026-08-24", items: [] } });
 assert.match(elements.get("today-empty").textContent, /closed/i);
 hooks.renderTodayPlan({ today_plan: { status: "provisional", local_date: "2026-08-24", items: [{ slot: "0-18:00", expected_occupancy: 25, independent_dates: 2 }] } });
-assert.match(elements.get("today-mode").textContent, /Early sample/);
-assert.match(elements.get("today-caption").textContent, /fewer than four independent local dates/);
+assert.match(elements.get("today-mode").textContent, /Early data/);
+assert.match(elements.get("today-caption").textContent, /fewer than 4 days/);
 
 const profile = hooks.validWeekdayProfile(readyInsights);
 assert.equal(profile.length, 1);
 assert.equal(profile[0].typical, 274);
 assert.equal(hooks.validWeekdayProfile({ weekday_profile: [{ weekday_index: 5, weekday: "Mon", typical_daily_occupancy: 274, independent_dates: 2 }] }).length, 0);
+hooks.renderVerdict(null, readyInsights);
+assert.match(elements.get("verdict-line").textContent, /Go around 6–7 PM/);
+assert.match(elements.get("verdict-sub").textContent, /about 25 people/);
+hooks.renderVerdict(null, { today_plan: { status: "closed", local_date: "2026-08-24", items: [] } });
+assert.match(elements.get("verdict-line").textContent, /closed right now/i);
+
 hooks.renderDayStrip(readyInsights);
 assert.equal(elements.get("day-empty").hidden, true);
-assert.match(elements.get("day-strip").textContent, /typical day level 274/);
+assert.match(elements.get("day-strip").textContent, /usually about 274 people/);
 hooks.renderDayStrip({ weekday_profile: [] });
 assert.equal(elements.get("day-empty").hidden, false);
 
@@ -102,15 +109,15 @@ const stability = hooks.validMonthlyStability(readyInsights, details);
 assert.equal(stability.length, 1);
 assert.equal(hooks.validMonthlyStability({ ...readyInsights, monthly_stability: { status: "ready", items: [{ slot: "1-18:00", independent_weeks: 2, week_spread: 8 }] } }, details).length, 0);
 hooks.renderMonthlyStability(readyInsights);
-assert.match(elements.get("stability-strip").textContent, /historical range/);
-assert.match(elements.get("stability-strip").textContent, /independent local weeks/);
+assert.match(elements.get("stability-strip").textContent, /between weeks/);
+assert.match(elements.get("stability-strip").textContent, /weeks of data/);
 
 assert.equal(hooks.validFactorContext(readyInsights).holidayDates, 1);
 assert.equal(hooks.validFactorContext({ factor_context: { ...readyInsights.factor_context, holiday_dates: "1" } }), null);
 assert.equal(hooks.validFactorContext({ factor_context: { ...readyInsights.factor_context, weather_progress: { ...readyInsights.factor_context.weather_progress, rainy_dates: "2" } } }), null);
 hooks.renderFactors(readyInsights);
-assert.match(elements.get("factor-weather").textContent, /2 rainy \/ 20/);
-assert.match(elements.get("factor-holidays").textContent, /1 holiday local date/);
+assert.match(elements.get("factor-weather").textContent, /Rainy days recorded: 2 of 20/);
+assert.match(elements.get("factor-holidays").textContent, /Recorded so far: 1 holiday day/);
 
 const weatherUnavailable = {
   ...readyInsights,
@@ -121,8 +128,8 @@ const weatherUnavailable = {
 };
 assert.equal(hooks.validFactorContext(weatherUnavailable).weather.status, "unavailable");
 hooks.renderFactors(weatherUnavailable);
-assert.match(elements.get("factor-weather").textContent, /Daily local weather is being recorded/);
-assert.match(elements.get("factor-holidays").textContent, /1 holiday local date/);
+assert.match(elements.get("factor-weather").textContent, /rain comparison comes once 20 rainy/);
+assert.match(elements.get("factor-holidays").textContent, /Recorded so far: 1 holiday day/);
 
 hooks.renderUnavailable();
 assert.equal(elements.get("quiet-list").children.length, 0);
