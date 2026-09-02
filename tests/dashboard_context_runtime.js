@@ -1,33 +1,25 @@
+// Runs the dashboard script in a bare VM with a stub DOM, then checks the pure
+// view model against synthetic readings. Fails loudly (assert) on any drift.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 
 class Element {
-  constructor() { this.children = []; this.hidden = false; this.textContent = ""; this.className = ""; }
-  append(...items) { this.children.push(...items); this.textContent += items.map((item) => typeof item === "string" ? item : item.textContent || "").join(""); }
+  constructor() { this.children = []; this.hidden = false; this.textContent = ""; this.className = ""; this.style = { setProperty() {} }; this.classList = { add() {} }; }
+  append(...items) { this.children.push(...items); this.textContent += items.map((item) => (typeof item === "string" ? item : item.textContent || "")).join(""); }
   replaceChildren(...items) { this.children = []; this.textContent = ""; this.append(...items); }
   setAttribute() {}
+  removeAttribute() {}
   querySelector() { return new Element(); }
 }
-
-const ids = [
-  "latest-count", "latest-unit", "latest-time", "now-delta", "signal-state", "signal-copy",
-  "chart-period", "chart-empty", "chart-caption", "heatmap-empty", "heatmap",
-  "verdict-line", "verdict-sub",
-  "stat-now", "stat-now-note", "stat-peak", "stat-peak-note", "stat-quiet", "stat-quiet-note",
-  "today-list", "today-empty", "today-caption", "today-mode",
-  "quiet-list", "quiet-empty", "stability-strip", "stability-empty", "day-strip", "day-empty",
-  "factor-weather", "factor-holidays", "updated-at", "announce",
-];
-const elements = new Map(ids.map((id) => [id, new Element()]));
+const elements = new Map();
 const page = fs.readFileSync("docs/index.html", "utf8");
 const script = page.match(/<script>\s*([\s\S]*?)\s*<\/script>/)[1];
-const hooks = {};
 const context = {
-  URL, Date, Intl, Math, Number, Object, Array, Boolean, String, RegExp, Promise, console,
-  __CROWD_DESK_TEST_HOOKS__: hooks,
+  URL, URLSearchParams, Date, Intl, Math, Number, Object, Array, Boolean, String, RegExp, Promise, Set, Map, JSON, console,
+  location: { search: "" },
   document: {
-    getElementById: (id) => elements.get(id),
+    getElementById: (id) => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); },
     createElement: () => new Element(),
     createElementNS: () => new Element(),
     createTextNode: (text) => String(text),
@@ -36,107 +28,102 @@ const context = {
 };
 context.globalThis = context;
 vm.runInNewContext(script, context);
+const api = context.__CROWD_DESK_V2__;
+assert.ok(api && typeof api.buildViewModel === "function", "buildViewModel must be exposed");
 
-const readyInsights = {
-  baselines: { "0-18:00": { median: 25, n: 4 } },
-  today_plan: { status: "ready", local_date: "2026-08-24", items: [{ slot: "0-18", expected_rate: 25, independent_dates: 4 }] },
-  weekday_profile: [{ weekday_index: 5, weekday: "Sat", typical_daily_visits: 274, independent_dates: 2 }],
-  quiet_window_details: { status: "ready", items: [{ slot: "0-18", baseline_occupancy: 25, independent_dates: 4, independent_weeks: 2, spread: 10 }] },
-  monthly_stability: { status: "ready", items: [{ slot: "0-18", independent_weeks: 2, week_spread: 8 }] },
-  factor_context: { holiday_dates: 1, non_holiday_dates: 8, weather_progress: { status: "collecting", rainy_dates: 2, dry_dates: 3, required_dates_per_group: 20 } },
-  correlations: { status: "insufficient_data" },
-};
+// ---- synthetic record: three weeks, every 10 minutes, New York time ----
+// Hourly walk-in profile by hour of day; the counter is cumulative per day.
+const PROFILE = { 5: 12, 6: 60, 7: 100, 8: 55, 9: 40, 10: 45, 11: 35, 12: 50, 13: 30, 14: 28, 15: 33, 16: 50, 17: 95, 18: 110, 19: 80, 20: 40, 21: 25, 22: 20 };
+const OPEN = [[5, 23], [5, 23], [5, 23], [5, 23], [5, 22], [7, 21], [8, 21]];
+function offsetForNY(dateKey) { return "-04:00"; } // all synthetic dates fall in EDT
+function makeReadings(fromKey, days, until) {
+  const rows = [];
+  const start = new Date(`${fromKey}T00:00:00${offsetForNY(fromKey)}`);
+  for (let d = 0; d < days; d += 1) {
+    const day = new Date(start.getTime() + d * 86400000);
+    const key = day.toISOString().slice(0, 10);
+    const weekday = (day.getUTCDay() + 6) % 7; // Mon = 0, using UTC midnight-4h anchoring
+    const [o, c] = OPEN[weekday];
+    let total = 0;
+    for (let minute = o * 60; minute < c * 60; minute += 10) {
+      const hour = Math.floor(minute / 60);
+      total += Math.round((PROFILE[hour] || 10) / 6);
+      const ts = new Date(`${key}T${String(hour).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}:00${offsetForNY(key)}`);
+      if (until && ts > until) break;
+      rows.push({ date: ts, occupancy: total, status: "active" });
+    }
+  }
+  return rows;
+}
 
-const details = hooks.validQuietDetails(readyInsights);
-assert.equal(details.length, 1);
-assert.equal(details[0].spread, 10);
-assert.equal(hooks.validQuietDetails({ quiet_window_details: { status: "ready", items: [{ ...readyInsights.quiet_window_details.items[0], independent_weeks: 0 }] } }).length, 0);
-assert.equal(hooks.validQuietDetails({ quiet_window_details: { status: "ready", items: [{ ...readyInsights.quiet_window_details.items[0], baseline_occupancy: "25" }] } }).length, 0);
+// CSV parsing
+const csv = ["timestamp_utc,occupancy,status", "2026-08-17T09:07:51Z,5,active", "2026-08-17T09:17:51Z,9,active"].join("\n");
+const parsed = api.parseCSV(csv);
+assert.equal(parsed.length, 2);
+assert.equal(parsed[1].occupancy, 9);
+assert.equal(api.parseCSV("timestamp_utc,occupancy,status\nbad,1,active"), null);
+assert.equal(api.parseCSV("nope"), null);
 
-hooks.renderQuietPlanner(readyInsights);
-assert.equal(elements.get("quiet-empty").hidden, true);
-assert.match(elements.get("quiet-list").textContent, /days of data/);
-hooks.renderQuietPlanner({ quiet_window_details: { status: "insufficient_data", items: [] }, recommendation_progress: { status: "collecting", matching_dates: 3, required_dates: 4 } });
-assert.match(elements.get("quiet-empty").textContent, /3 of 4 days needed/);
-assert.equal(elements.get("quiet-list").children.length, 0);
+// Open, Tuesday 6:20 PM New York on 2026-09-01, with three prior Tuesdays on record.
+const openNow = new Date("2026-09-01T22:20:00Z");
+const readings = makeReadings("2026-08-10", 23, openNow);
+const open = api.buildViewModel(readings, {}, openNow);
+assert.equal(open.status, "open");
+assert.equal(open.clock.weekdayIndex, 1);
+assert.equal(open.clock.hour, 18);
+assert.ok(open.pick, "an open gym with history must produce a pick");
+assert.equal(open.pick.hour, 22, "quietest remaining hour follows the profile");
+assert.ok(open.pick.n >= 3, "pick evidence counts prior Tuesdays only");
+assert.equal(open.weekdayDates, 3);
+assert.equal(open.lastHour, 17);
+assert.ok(open.lastVisits > 0 && open.lastTypical && open.lastTypical.median > 0);
+assert.ok(open.todayHours.find((h) => h.hour === 18).visits !== null, "in-progress hour carries partial visits");
+assert.equal(open.todayHours.find((h) => h.hour === 19).visits, null, "future hours are not filled in");
 
-const plan = hooks.validTodayPlan(readyInsights);
-assert.equal(plan.status, "ready");
-assert.equal(plan.items.length, 1);
-assert.equal(plan.items[0].label, "Mon · 6 PM–7 PM");
-assert.equal(hooks.validTodayPlan({ today_plan: { ...readyInsights.today_plan, items: [{ ...readyInsights.today_plan.items[0], expected_rate: "25" }] } }), null);
-hooks.renderTodayPlan(readyInsights);
-assert.equal(elements.get("today-empty").hidden, true);
-assert.match(elements.get("today-list").textContent, /based on 4 days of data/);
-hooks.renderTodayPlan({ today_plan: { status: "closed", local_date: "2026-08-24", items: [] } });
-assert.match(elements.get("today-empty").textContent, /closed/i);
-hooks.renderTodayPlan({ today_plan: { status: "provisional", local_date: "2026-08-24", items: [{ slot: "0-18", expected_rate: 25, independent_dates: 2 }] } });
-assert.match(elements.get("today-mode").textContent, /Early data/);
-assert.match(elements.get("today-caption").textContent, /fewer than 4 days/);
+// Dayparts: one row per part of the open day, passed parts flagged, best hour in each.
+assert.equal(JSON.stringify(open.dayparts.map((d) => d.label)), JSON.stringify(["Early", "Morning", "Midday", "Afternoon", "Evening", "Late"]));
+assert.equal(JSON.stringify(open.dayparts.map((d) => d.passed)), JSON.stringify([true, true, true, true, false, false]));
+assert.equal(open.dayparts.find((d) => d.label === "Late").best.hour, 22);
+assert.equal(open.dayparts.find((d) => d.label === "Afternoon").best.hour, 14);
+assert.equal(open.dayparts.find((d) => d.label === "Evening").current, true);
 
-const profile = hooks.validWeekdayProfile(readyInsights);
-assert.equal(profile.length, 1);
-assert.equal(profile[0].typical, 274);
-assert.equal(hooks.validWeekdayProfile({ weekday_profile: [{ weekday_index: 5, weekday: "Mon", typical_daily_visits: 274, independent_dates: 2 }] }).length, 0);
-hooks.renderVerdict(null, readyInsights);
-assert.match(elements.get("verdict-line").textContent, /Go around 6 PM–7 PM/);
-assert.match(elements.get("verdict-sub").textContent, /about 25 walk-ins/);
-hooks.renderVerdict(null, { today_plan: { status: "closed", local_date: "2026-08-24", items: [] } });
-assert.match(elements.get("verdict-line").textContent, /closed right now/i);
+// Weekday summary skips the opening hour so 5 AM is not the answer every day.
+const tue = open.weekdaySummary.find((r) => r.weekdayIndex === 1);
+assert.ok(tue, "Tuesday appears in the weekday summary");
+assert.notEqual(tue.quiet.hour, 5, "opening hour is left out of quietest");
+assert.equal(tue.quiet.hour, 22);
+assert.equal(tue.busy.hour, 18);
+const sat = open.weekdaySummary.find((r) => r.weekdayIndex === 5);
+assert.notEqual(sat.quiet.hour, 7, "Saturday opening hour (7 AM) is left out too");
 
-hooks.renderDayStrip(readyInsights);
-assert.equal(elements.get("day-empty").hidden, true);
-assert.match(elements.get("day-strip").textContent, /usually about 274 check-ins that day/);
-hooks.renderDayStrip({ weekday_profile: [] });
-assert.equal(elements.get("day-empty").hidden, false);
+// Week heatmap: closed hours are blank, open hours carry medians, range is finite.
+assert.ok(Number.isFinite(open.weekMin) && Number.isFinite(open.weekMax) && open.weekMax > open.weekMin);
+const sunday = open.week[6];
+assert.equal(sunday.cells.find((c) => c.hour === 5).closed, true);
+assert.equal(sunday.cells.find((c) => c.hour === 9).closed, false);
 
-assert.equal(hooks.validBaselineFor(readyInsights, "0-18:00").median, 25);
-assert.equal(hooks.validBaselineFor(readyInsights, "1-18"), null);
-assert.equal(hooks.validBaselineFor({ baselines: { "0-18": { median: 25, n: 1 } } }, "0-18"), null);
-const comparisonInsights = { ...readyInsights, now_comparison: { visits: 30, typical: 25, minutes: 60, weekday: 0, hour: 18 } };
-hooks.renderNowDelta([], comparisonInsights);
-assert.equal(elements.get("now-delta").hidden, false);
-assert.match(elements.get("now-delta").textContent, /\+20% vs normal/);
-assert.match(elements.get("now-delta").textContent, /about 30 walk-ins in the last hour/);
-hooks.renderNowDelta([], { baselines: {} });
-assert.equal(elements.get("now-delta").hidden, true);
+// Closed, Wednesday 3 AM: recap yesterday, point at today's later picks, no pick.
+const closedNow = new Date("2026-09-02T07:00:00Z");
+const closed = api.buildViewModel(makeReadings("2026-08-10", 23, closedNow), {}, closedNow);
+assert.equal(closed.status, "pre-open");
+assert.equal(closed.pick, null);
+assert.equal(closed.planWeekday, 2);
+assert.ok(closed.dayparts.every((d) => !d.passed));
+assert.ok(closed.dayparts.some((d) => d.best && d.best.hour !== 5), "later parts of the day have their own best hour");
 
-const reading = { occupancy: 30, date: new Date("2026-08-24T18:02:00-04:00") };
-hooks.renderStatChips([reading], comparisonInsights);
-assert.equal(elements.get("stat-now").textContent, "+20%");
-assert.match(elements.get("stat-quiet").textContent, /^~25$/);
+// After close, Tuesday 11:30 PM: status closed, tomorrow's weekday is planned.
+const lateNow = new Date("2026-09-02T03:30:00Z");
+const late = api.buildViewModel(makeReadings("2026-08-10", 23, lateNow), {}, lateNow);
+assert.equal(late.status, "closed");
+assert.equal(late.nextWeekday, 2);
+assert.equal(late.planWeekday, 2);
+assert.ok(late.todayTotal > 0, "closed state recaps today's total");
 
-const stability = hooks.validMonthlyStability(readyInsights, details);
-assert.equal(stability.length, 1);
-assert.equal(hooks.validMonthlyStability({ ...readyInsights, monthly_stability: { status: "ready", items: [{ slot: "1-18", independent_weeks: 2, week_spread: 8 }] } }, details).length, 0);
-hooks.renderMonthlyStability(readyInsights);
-assert.match(elements.get("stability-strip").textContent, /between weeks/);
-assert.match(elements.get("stability-strip").textContent, /weeks of data/);
-
-assert.equal(hooks.validFactorContext(readyInsights).holidayDates, 1);
-assert.equal(hooks.validFactorContext({ factor_context: { ...readyInsights.factor_context, holiday_dates: "1" } }), null);
-assert.equal(hooks.validFactorContext({ factor_context: { ...readyInsights.factor_context, weather_progress: { ...readyInsights.factor_context.weather_progress, rainy_dates: "2" } } }), null);
-hooks.renderFactors(readyInsights);
-assert.match(elements.get("factor-weather").textContent, /Rainy days recorded: 2 of 20/);
-assert.match(elements.get("factor-holidays").textContent, /Recorded so far: 1 holiday day/);
-
-const weatherUnavailable = {
-  ...readyInsights,
-  factor_context: {
-    ...readyInsights.factor_context,
-    weather_progress: { status: "unavailable", rainy_dates: 0, dry_dates: 0, required_dates_per_group: 20 },
-  },
-};
-assert.equal(hooks.validFactorContext(weatherUnavailable).weather.status, "unavailable");
-hooks.renderFactors(weatherUnavailable);
-assert.match(elements.get("factor-weather").textContent, /rain comparison comes once 20 rainy/);
-assert.match(elements.get("factor-holidays").textContent, /Recorded so far: 1 holiday day/);
-
-hooks.renderUnavailable();
-assert.equal(elements.get("quiet-list").children.length, 0);
-assert.equal(elements.get("stability-strip").children.length, 0);
-assert.equal(elements.get("now-delta").hidden, true);
-assert.equal(elements.get("stat-now").textContent, "—");
-assert.equal(elements.get("stat-quiet").textContent, "—");
-
-console.log("dashboard runtime contracts OK");
+// Unavailable data path renders the explicit empty state without throwing.
+const unavailableIds = ["headline", "chart-empty", "heat-empty", "parts-empty", "days-empty"];
+unavailableIds.forEach((id) => elements.set(id, new Element()));
+setTimeout(() => {
+  assert.match(elements.get("headline").textContent, /couldn’t load/);
+  assert.equal(elements.get("parts-empty").hidden, false);
+  console.log("dashboard runtime contracts: ok");
+}, 20);

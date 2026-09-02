@@ -11,19 +11,19 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
         cls.page = (ROOT / "docs" / "index.html").read_text()
         cls.readme = (ROOT / "README.md").read_text()
 
-    def test_go_now_regions_keep_the_page_compact(self):
+    def test_page_regions_are_present(self):
         for contract in (
-            'id="verdict-line"',
-            'id="today-heading">Go today',
-            'id="last24-heading">Today vs a normal day',
-            'id="stat-now"',
-            'id="stat-peak"',
-            'id="stat-quiet"',
-            'id="quiet-heading">Usually quietest',
-            'id="pattern-heading">When it gets crowded',
-            'id="factors-heading">What changes the crowds',
-            'id="stability-strip"',
-            'id="day-strip"',
+            'id="headline"',
+            'id="support"',
+            'id="l-count"',
+            'id="l-hour"',
+            'id="l-record"',
+            'id="chart-heading">Today, hour by hour',
+            'id="parts-heading">Best time in each part of the day',
+            'id="week-heading">A typical week',
+            'id="days-heading">Quietest and busiest hour, by weekday',
+            'id="fine-1"',
+            'id="fine-2"',
         ):
             self.assertIn(contract, self.page)
 
@@ -34,60 +34,38 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
         )
         self.assertIn('fetchText(`${LIVE_DATA_ORIGIN}/readings.csv?days=90`)', self.page)
         self.assertIn('fetchText(`${LIVE_DATA_ORIGIN}/insights.json?days=90`)', self.page)
-        self.assertNotIn('id="class-list"', self.page)
-        self.assertNotIn('function renderClassAnnotations', self.page)
-        self.assertNotIn('id="schedule-context"', self.page)
-        self.assertNotIn("function renderScheduleContext", self.page)
-        self.assertNotIn("function validClassSchedule", self.page)
-        self.assertNotIn("function renderChart", self.page)
-        self.assertNotIn("function chartRangeLabel", self.page)
 
-    def test_validated_evidence_contracts_guard_public_claims(self):
+    def test_view_model_is_separated_from_rendering(self):
         for contract in (
-            "function validQuietDetails(insights)",
-            'details.status !== "ready"',
-            "Number.isInteger(independentDates)",
-            "independentDates < 4",
-            "Number.isInteger(independentWeeks)",
-            "independentWeeks < 1",
-            "function validMonthlyStability(insights, quietDetails)",
-            "function validFactorContext(insights)",
-            "function validTodayPlan(insights)",
-            "function validWeekdayProfile(insights)",
-            "function validBaselineFor(insights, key)",
-            "function renderQuietPlanner(insights)",
-            "function renderMonthlyStability(insights)",
-            "function renderFactors(insights)",
-            "function renderTodayPlan(insights)",
-            "function renderDayStrip(insights)",
-            "function renderVerdict(readings, insights)",
-            "function renderNowDelta(readings, insights)",
-            "function renderStatChips(readings, insights)",
-            "function renderTodayVsTypical(readings)",
+            "function buildViewModel(readings, insights, now)",
+            "function hourlyVisits(readings)",
+            "globalThis.__CROWD_DESK_V2__ = { buildViewModel, parseCSV, hourlyVisits };",
+            "function renderAnswer(vm)",
+            "function renderLedger(vm)",
+            "function renderChart(vm)",
+            "function renderParts(vm)",
+            "function renderWeek(vm)",
+            "function renderDays(vm)",
+            "function renderFine(vm)",
             "function renderUnavailable()",
-            "renderQuietPlanner(insights);",
-            "renderMonthlyStability(insights);",
-            "renderFactors(insights);",
-            "renderTodayPlan(insights);",
-            "renderDayStrip(insights);",
-            "renderVerdict(readings, insights);",
-            "renderNowDelta(readings, insights);",
-            "renderStatChips(readings, insights);",
-            "renderTodayVsTypical(readings);",
         ):
             self.assertIn(contract, self.page)
 
-    def test_planner_copy_is_evidence_bound_and_non_causal(self):
+    def test_every_number_is_walk_ins_per_hour(self):
+        self.assertNotIn("typical_daily_visits", self.page)
+        self.assertNotIn("check-ins that day", self.page)
+        self.assertIn("walk-ins per hour", self.page)
+
+    def test_copy_is_evidence_bound_and_non_causal(self):
         for contract in (
-            "days of data",
-            "between weeks",
+            "Based on ${plural(",
+            "opening hour left out",
+            "Quietest ${when} after the opening hour",
+            "An hour is only called reliably quiet after it has been quiet on 4 separate days.",
             "Observed association, not proof",
-            "Seen on ${progress.matchingDates} of 4 days needed — check back soon.",
-            "Rainy days recorded: ${weather.rainyDates} of 20 · dry days: ${weather.dryDates} of 20. Then we can compare.",
-            "Early data — these picks are based on fewer than 4 days and can still shift.",
-            "Go around ${best.label.replace",
-            "reliably quiet",
-            "Dashed line = a normal ${days[weekdayIndex]}",
+            "Context, not causes.",
+            "not people in the room",
+            "yesterday’s total",
         ):
             self.assertIn(contract, self.page)
 
@@ -107,19 +85,16 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
         ):
             self.assertIn(contract, self.readme)
 
-    def test_unavailable_readings_clear_all_downstream_regions(self):
+    def test_unavailable_readings_clear_every_region(self):
         start = self.page.index("function renderUnavailable()")
-        end = self.page.index("function svgEl", start)
+        end = self.page.index("globalThis.__CROWD_DESK_V2__", start)
         unavailable = self.page[start:end]
         for contract in (
-            '$("quiet-list").replaceChildren();',
-            '$("stability-strip").replaceChildren();',
-            '$("factor-weather").replaceChildren();',
-            '$("factor-holidays").replaceChildren();',
-            '$("now-delta").hidden = true;',
-            '$("stat-now").textContent = "—";',
-            '$("stat-peak").textContent = "—";',
-            '$("stat-quiet").textContent = "—";',
+            '$("headline").textContent = "The record couldn’t load";',
+            '$("chart-empty").hidden = false;',
+            '$("heat-empty").hidden = false;',
+            '$("parts-empty").hidden = false;',
+            '$("days-empty").hidden = false;',
         ):
             self.assertIn(contract, unavailable)
 
