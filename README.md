@@ -15,14 +15,17 @@ weather comparison as “Observed association, not proof”; independent local
 dates are its evidence threshold. The quiet-window stability view shows the
 historical range.
 
-## Redesign candidate
+## The dashboard
 
-[`docs/v2.html`](docs/v2.html) is a single-column redesign of the same
-dashboard, reading the same live endpoints: one answer, one hour-by-hour
-chart with a "now" marker and the recommended window, one weekly heatmap,
-and fine print. It keeps every number in one unit (walk-ins per hour) and
-separates a pure view-model builder from rendering. Append `?at=<ISO time>`
-to preview how it reads at another moment, using only readings up to then.
+[`docs/index.html`](docs/index.html) is a single column: one answer for
+right now (open, before opening, or closed), a ledger of the last reading,
+the last full hour against normal, and the size of the record, then an
+hour-by-hour chart with a "now" marker and the recommended window, the best
+hour in each part of the day, a weekly heatmap of open hours, and each
+weekday's quietest hour after opening and busiest hour. Every number is
+walk-ins per hour. A pure `buildViewModel()` derives all of it from the
+readings; rendering only paints. Append `?at=<ISO time>` to preview how the
+page reads at another moment, using only readings up to then.
 
 ## Source and collection
 
