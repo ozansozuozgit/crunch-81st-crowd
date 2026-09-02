@@ -4,19 +4,51 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="A public, measured crowd record for Crunch E 81st St in New York City." />
+    <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1a1917" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23e04a0e'/%3E%3Crect x='7' y='17' width='4' height='8' rx='1' fill='%23fff'/%3E%3Crect x='14' y='11' width='4' height='14' rx='1' fill='%23fff'/%3E%3Crect x='21' y='7' width='4' height='18' rx='1' fill='%23fff'/%3E%3C/svg%3E" />
     <title>81ST / CROWD DESK</title>
     <style>
       :root {
-        --ink: #1c1a16;
-        --muted: #6f6a5f;
-        --faint: #9b958a;
-        --bg: #f6f5f1;
-        --card: #ffffff;
-        --border: #e4e0d6;
-        --accent: #e04a0e;
-        --accent-soft: #fdeee6;
-        --good: #1a7f4f;
-        --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        color-scheme: light;
+        --ink: oklch(22% .012 75);
+        --muted: oklch(50% .018 75);
+        --faint: oklch(66% .016 75);
+        --bg: oklch(96.5% .006 85);
+        --card: oklch(99.2% .003 85);
+        --border: oklch(90% .012 80);
+        --rule: oklch(86% .012 80);
+        --cell-empty: oklch(93% .008 85);
+        --accent: oklch(62% .21 38);
+        --accent-ink: oklch(52% .19 38);
+        --accent-soft: oklch(95.5% .03 45);
+        --accent-soft-border: oklch(88% .06 45);
+        --band: oklch(62% .21 38 / .14);
+        --heat-low: oklch(93% .07 85);
+        --heat-mid: oklch(76% .17 50);
+        --heat-high: oklch(50% .2 35);
+        --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          color-scheme: dark;
+          --ink: oklch(94% .008 85);
+          --muted: oklch(70% .014 80);
+          --faint: oklch(56% .014 80);
+          --bg: oklch(18% .008 70);
+          --card: oklch(22.5% .009 70);
+          --border: oklch(30% .012 70);
+          --rule: oklch(34% .012 70);
+          --cell-empty: oklch(27% .008 70);
+          --accent: oklch(72% .19 42);
+          --accent-ink: oklch(78% .17 45);
+          --accent-soft: oklch(28% .05 40);
+          --accent-soft-border: oklch(38% .08 40);
+          --band: oklch(72% .19 42 / .18);
+          --heat-low: oklch(34% .05 60);
+          --heat-mid: oklch(58% .16 45);
+          --heat-high: oklch(78% .18 50);
+        }
       }
 
       * { box-sizing: border-box; }
@@ -24,6 +56,7 @@
       body { margin: 0; overflow-x: hidden; font-family: var(--sans); font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
       button, input, select, textarea { font: inherit; }
       strong { font-weight: 650; }
+      [hidden] { display: none !important; }
       .shell { width: min(1080px, calc(100% - 40px)); margin: 0 auto; }
 
       .kicker, .eyebrow, .label, .data-note, .meta, .site-footer {
@@ -34,12 +67,12 @@
       h1, h2, h3, p { margin-top: 0; }
       h1 { font-size: clamp(1.9rem, 4vw, 2.6rem); font-weight: 750; letter-spacing: -.022em; line-height: 1.08; margin: 30px 0 10px; }
       h1 em { color: var(--accent); font-style: normal; }
-      .dek { color: var(--muted); font-size: 1.05rem; max-width: 560px; margin-bottom: 6px; }
+      .dek { color: var(--muted); font-size: 1.05rem; max-width: 560px; margin-bottom: 6px; text-wrap: pretty; }
 
-      .verdict { background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 12px; margin: 30px 0 22px; padding: 22px 26px; }
-      .verdict .eyebrow { color: var(--accent); margin-bottom: 8px; }
-      .verdict-line { font-size: clamp(1.45rem, 3.2vw, 2.1rem); font-weight: 750; letter-spacing: -.015em; line-height: 1.12; margin: 0; }
-      .verdict-sub { color: var(--muted); font-size: .92rem; margin: 8px 0 0; }
+      .verdict { background: var(--accent-soft); border: 1px solid var(--accent-soft-border); border-radius: 12px; margin: 30px 0 22px; padding: 22px 26px; }
+      .verdict .eyebrow { color: var(--accent-ink); margin-bottom: 8px; }
+      .verdict-line { font-size: clamp(1.45rem, 3.2vw, 2.1rem); font-weight: 750; letter-spacing: -.015em; line-height: 1.12; margin: 0; text-wrap: balance; }
+      .verdict-sub { color: var(--muted); font-size: .92rem; margin: 8px 0 0; max-width: 64ch; text-wrap: pretty; }
 
       .status-strip { align-items: stretch; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(220px, .7fr); gap: 14px; margin: 0 auto 22px; }
       .latest, .signal, .paper, .stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
@@ -50,45 +83,56 @@
       .count span { color: var(--muted); font-size: .8rem; font-weight: 600; }
       .measure-time { color: var(--muted); font-size: .92rem; margin: 12px 0 0; }
       .measure-time strong { color: var(--ink); }
-      .measure-time[hidden] { display: none; }
-      .signal { background: var(--accent-soft); border-color: #f5d5c4; display: flex; flex-direction: column; justify-content: space-between; padding: 22px 26px; }
-      .signal .label { color: var(--accent); }
-      .signal strong { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 750; letter-spacing: -.01em; line-height: 1.1; text-transform: capitalize; }
-      .signal p { font-size: .88rem; margin: 14px 0 0; }
+      .signal { display: flex; flex-direction: column; justify-content: space-between; padding: 22px 26px; }
+      .signal .label { margin-bottom: 8px; }
+      .signal strong { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 750; letter-spacing: -.01em; line-height: 1.1; text-transform: capitalize; white-space: pre-line; }
+      .signal p { color: var(--muted); font-size: .88rem; margin: 14px 0 0; text-wrap: pretty; }
 
       main { padding-bottom: 48px; }
       section { margin-top: 44px; }
-      .section-heading { align-items: baseline; border-bottom: 1px solid var(--border); display: flex; gap: 16px; justify-content: space-between; margin: 0 0 16px; padding-bottom: 10px; }
+      .section-heading { align-items: baseline; border-bottom: 1px solid var(--rule); display: flex; gap: 16px; justify-content: space-between; margin: 0 0 16px; padding-bottom: 10px; }
       .section-heading h2 { font-size: 1.3rem; font-weight: 700; letter-spacing: -.01em; margin: 0; }
       .section-heading p { color: var(--muted); font-size: .8rem; font-weight: 600; margin: 0; text-align: right; }
 
       .paper { padding: 22px 24px; }
       .chart-wrap { min-height: 320px; }
       .chart-wrap svg { display: block; height: auto; overflow: visible; width: 100%; }
-      .chart-empty, .empty-note { color: var(--muted); font-size: .95rem; max-width: 56ch; padding: 14px 0; }
-      .chart-caption { border-top: 1px solid var(--border); color: var(--muted); font-size: .85rem; margin: 16px 0 0; padding-top: 12px; }
+      .chart-empty, .empty-note { color: var(--muted); font-size: .95rem; max-width: 56ch; margin: 0; padding: 4px 0; text-wrap: pretty; }
+      .chart-caption { border-top: 1px solid var(--border); color: var(--muted); font-size: .85rem; margin: 16px 0 0; padding-top: 12px; text-wrap: pretty; }
+      .chart-caption:empty { display: none; }
+      .empty-note:not([hidden]) + .chart-caption { display: none; }
+
+      .chart-grid { stroke: var(--rule); stroke-width: 1; stroke-dasharray: 3 5; }
+      .chart-axis { stroke: var(--ink); stroke-width: 1.5; }
+      .chart-label { fill: var(--muted); font-family: var(--sans); font-size: 12px; }
+      .chart-band { fill: var(--band); }
+      .chart-typical { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-dasharray: 7 6; stroke-linecap: round; }
+      .chart-today { fill: var(--accent); }
 
       .stat-row { display: grid; gap: 14px; grid-template-columns: repeat(3, 1fr); margin-bottom: 14px; }
       .stat { padding: 18px 20px; }
       .stat strong { display: block; font-size: 2rem; font-weight: 750; letter-spacing: -.02em; line-height: 1; margin-top: 8px; font-variant-numeric: tabular-nums; }
       .stat small { color: var(--muted); display: block; font-size: .78rem; font-weight: 550; margin-top: 6px; }
 
-      .grid { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; margin-top: 0; }
-      .grid section { margin-top: 0; }
+      .grid { display: grid; gap: 14px 24px; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); margin-top: 44px; }
+      .grid section { margin-top: 0; min-width: 0; }
       .grid .paper + .paper { margin-top: 14px; }
 
       .heatmap-scroll { overflow-x: auto; padding-bottom: 4px; }
-      .heatmap { border-collapse: collapse; font-size: .68rem; min-width: 640px; width: 100%; }
-      .heatmap th { color: var(--faint); font-size: .64rem; font-weight: 600; letter-spacing: .04em; padding: 0 1px 8px; text-align: center; }
+      .heatmap { border-collapse: collapse; font-size: .68rem; min-width: 560px; width: 100%; }
+      .heatmap th { color: var(--faint); font-size: .64rem; font-weight: 600; letter-spacing: .04em; padding: 0 1px 8px; text-align: center; font-variant-numeric: tabular-nums; }
       .heatmap th[scope="row"] { color: var(--muted); padding-right: 9px; text-align: left; text-transform: uppercase; }
       .heatmap td { border: 2px solid var(--card); border-radius: 3px; height: 24px; min-width: 18px; padding: 0; text-align: center; }
-      .heatmap td.is-empty { background: #edeae2; }
+      .heatmap td.is-empty { background: var(--cell-empty); }
+      .heatmap td.has-value { --r: 0; background: color-mix(in oklch, var(--heat-mid) calc(var(--r) * 100%), var(--heat-low)); }
+      .heatmap td.has-value.is-hot { background: color-mix(in oklch, var(--heat-high) calc((var(--r) - .5) * 200%), var(--heat-mid)); }
       .heatmap-key { align-items: center; color: var(--muted); display: flex; font-size: .72rem; gap: 8px; justify-content: flex-end; margin: 12px 0 0; }
-      .key-gradient { background: linear-gradient(90deg, #ffe3b8, #ff9862 52%, #be360b); border-radius: 3px; display: inline-block; height: 8px; width: 96px; }
+      .key-gradient { background: linear-gradient(90deg in oklch, var(--heat-low), var(--heat-mid) 50%, var(--heat-high)); border-radius: 3px; display: inline-block; height: 8px; width: 96px; }
 
       .quiet-list { list-style: none; margin: 0; padding: 0; }
-      .quiet-list li { align-items: center; border-bottom: 1px solid var(--border); display: grid; gap: 12px; grid-template-columns: 30px 1fr auto; padding: 13px 0; }
-      .quiet-list li:last-child { border-bottom: 0; }
+      .quiet-list li { align-items: center; border-bottom: 1px solid var(--border); display: grid; gap: 12px; grid-template-columns: 30px minmax(0, 1fr) auto; padding: 13px 0; }
+      .quiet-list li:first-child { padding-top: 0; }
+      .quiet-list li:last-child { border-bottom: 0; padding-bottom: 0; }
       .rank { color: var(--faint); font-size: .95rem; font-weight: 650; font-variant-numeric: tabular-nums; }
       .window { font-size: .98rem; font-weight: 600; }
       .window small { color: var(--muted); display: block; font-size: .76rem; font-weight: 500; margin-top: 2px; }
@@ -96,35 +140,48 @@
       .median small { color: var(--muted); display: block; font-size: .68rem; font-weight: 550; }
 
       .weather { margin-top: 44px; }
+      .paper > .data-note { margin-bottom: 10px; }
       .stability-strip { display: grid; gap: 0; }
-      .stability-item { align-items: baseline; border-bottom: 1px solid var(--border); display: grid; gap: 10px; grid-template-columns: minmax(110px, 1fr) auto; padding: 10px 0; }
-      .stability-item:last-child { border-bottom: 0; }
-      .stability-item strong { font-size: 1rem; font-weight: 700; }
-      .stability-item span { color: var(--muted); font-size: .8rem; text-align: right; }
-      .stability-item.is-best strong { color: var(--accent); }
+      .stability-item { align-items: baseline; border-bottom: 1px solid var(--border); display: grid; gap: 2px 16px; grid-template-columns: minmax(48px, auto) minmax(0, 1fr); padding: 9px 0; }
+      .stability-item:last-child { border-bottom: 0; padding-bottom: 0; }
+      .stability-item strong { font-size: 1rem; font-weight: 700; white-space: nowrap; }
+      .stability-item span { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; text-wrap: pretty; }
+      .stability-item.is-best strong { color: var(--accent-ink); }
 
-      .factor-grid { display: grid; gap: 18px; grid-template-columns: repeat(2, 1fr); }
-      .factor-grid p { border-left: 2px solid var(--border); font-size: .93rem; margin: 0; padding-left: 14px; }
+      .factor-grid { display: grid; gap: 18px 28px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .factor-grid p { font-size: .93rem; margin: 0; text-wrap: pretty; }
       .factor-grid strong { display: block; font-size: .72rem; font-weight: 650; letter-spacing: .09em; margin-bottom: 4px; text-transform: uppercase; color: var(--muted); }
 
-      .methods { border-top: 1px solid var(--border); margin-top: 48px; padding-top: 22px; }
+      .methods { border-top: 1px solid var(--rule); margin-top: 48px; padding-top: 22px; }
       .methods h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 12px; }
-      .methods-grid { display: grid; gap: 20px; grid-template-columns: repeat(3, 1fr); }
-      .methods p { color: var(--muted); font-size: .88rem; margin-bottom: 0; }
+      .methods-grid { display: grid; gap: 20px 28px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .methods p { color: var(--muted); font-size: .88rem; margin-bottom: 0; text-wrap: pretty; }
       .methods strong { color: var(--ink); font-size: .8rem; }
 
-      .site-footer { border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: space-between; padding: 18px 0 30px; }
+      .site-footer { border-top: 1px solid var(--rule); display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: space-between; padding: 18px 0 30px; }
       .sr-only { height: 1px; margin: -1px; overflow: hidden; padding: 0; position: absolute; width: 1px; clip: rect(0, 0, 0, 0); white-space: nowrap; }
       .visually-muted { color: var(--muted); }
 
+      @media (max-width: 860px) {
+        .grid { grid-template-columns: 1fr; }
+      }
       @media (max-width: 720px) {
         .shell { width: min(100% - 28px, 1080px); }
-        .status-strip, .grid, .methods-grid, .factor-grid, .stat-row { grid-template-columns: 1fr; }
-        .factor-grid p { border-left: 0; border-top: 1px solid var(--border); padding: 12px 0 0; }
+        .status-strip, .methods-grid, .factor-grid { grid-template-columns: 1fr; }
+        .factor-grid p + p { border-top: 1px solid var(--border); padding-top: 14px; }
         .latest, .signal, .paper, .stat { padding: 18px; }
+        .stat-row { gap: 10px; }
+        .stat { padding: 14px; }
+        .stat strong { font-size: 1.5rem; }
+        .chart-wrap { min-height: 0; }
+        .chart-label { font-size: 22px; }
         .section-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
         .section-heading p { text-align: left; }
         .site-footer { flex-direction: column; }
+      }
+      @media (max-width: 480px) {
+        .stat-row { grid-template-columns: 1fr; }
+        .kicker { flex-direction: column; gap: 2px; }
       }
       @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; } }
     </style>
@@ -148,7 +205,7 @@
       <section class="status-strip" aria-labelledby="latest-heading">
         <div class="latest">
           <div class="eyebrow" id="latest-heading">Check-ins today</div>
-          <div class="count"><strong id="latest-count">—</strong><span id="latest-unit">people · measured</span></div>
+          <div class="count"><strong id="latest-count">—</strong><span id="latest-unit">since opening</span></div>
           <p class="measure-time" id="latest-time">Waiting for the first public measurement.</p>
           <p class="measure-time" id="now-delta" hidden></p>
         </div>
@@ -192,6 +249,16 @@
             <ol class="quiet-list" id="quiet-list"></ol>
             <p class="empty-note" id="quiet-empty">We only call a time “reliably quiet” after seeing it on 4 separate days.</p>
           </div>
+          <div class="paper">
+            <p class="data-note">Quietest day</p>
+            <div class="stability-strip" id="day-strip"></div>
+            <p class="empty-note" id="day-empty">Day rankings appear as days pile up.</p>
+          </div>
+          <div class="paper">
+            <p class="data-note">Does it repeat?</p>
+            <div class="stability-strip" id="stability-strip"></div>
+            <p class="empty-note" id="stability-empty">Shows whether quiet times repeat week to week — available soon.</p>
+          </div>
         </section>
 
         <section aria-labelledby="pattern-heading">
@@ -202,16 +269,6 @@
             </div>
             <div class="heatmap-key" aria-hidden="true"><span>Lower</span><span class="key-gradient"></span><span>Higher</span></div>
             <p class="empty-note" id="heatmap-empty">No readings have been collected yet.</p>
-          </div>
-          <div class="paper">
-            <p class="data-note">Quietest day</p>
-            <div class="stability-strip" id="day-strip"></div>
-            <p class="empty-note" id="day-empty">Day rankings appear as days pile up.</p>
-          </div>
-          <div class="paper">
-            <p class="data-note">Does it repeat?</p>
-            <div class="stability-strip" id="stability-strip"></div>
-            <p class="empty-note" id="stability-empty">Shows whether quiet times repeat week to week — available soon.</p>
           </div>
         </section>
       </div>
@@ -353,12 +410,12 @@
           const latest = readings.at(-1);
           if (!latest) return;
           $("latest-count").textContent = String(latest.occupancy);
-          $("latest-unit").textContent = "check-ins today";
+          $("latest-unit").textContent = "since opening";
           const measured = document.createElement("strong");
           measured.textContent = fmt.format(latest.date);
           $("latest-time").replaceChildren("Measured ", measured);
-          $("signal-state").textContent = latest.status ? `${latest.status}\nrecorded` : "Reading\nrecorded";
-          $("signal-copy").textContent = "Crunch’s counter totals visits since opening — not people in the room.";
+          $("signal-state").textContent = latest.status ? latest.status : "Reading recorded";
+          $("signal-copy").textContent = "Status reported by the club. The counter totals visits since opening, not people in the room.";
           const generated = safeDate(insights.generated_at);
           $("updated-at").textContent = generated ? `Insights generated: ${fmt.format(generated)}` : `Latest measurement: ${fmt.format(latest.date)}`;
         }
@@ -504,7 +561,7 @@
           if (!priorDates.size) {
             empty.hidden = false;
             empty.textContent = `No past ${days[weekdayIndex]}s recorded yet — the dashed “normal day” line appears after one full ${days[weekdayIndex]}.`;
-            chart.hidden = true;
+            chart.setAttribute("hidden", "");
             $("chart-period").textContent = `Awaiting ${days[weekdayIndex]} history`;
             return;
           }
@@ -522,7 +579,7 @@
             .filter((entry) => entry.visits !== null && entry.hour <= todayClock.hour);
 
           empty.hidden = true;
-          chart.hidden = false;
+          chart.removeAttribute("hidden");
           chart.replaceChildren(svgEl("title", { id: "chart-title" }), svgEl("desc", { id: "chart-desc" }));
           chart.querySelector("title").textContent = `Walk-ins per hour today against a normal ${days[weekdayIndex]}`;
           const maxValue = Math.max(...typical.map((slot) => slot.high), ...today.map((entry) => entry.visits), 5);
@@ -534,8 +591,8 @@
 
           [0, upper / 2, upper].forEach((value) => {
             const lineY = y(value);
-            chart.append(svgEl("line", { x1: 58, x2: 892, y1: lineY, y2: lineY, stroke: value === 0 ? "#1c1a16" : "#ddd8cc", "stroke-width": value === 0 ? 1.5 : 1, "stroke-dasharray": value === 0 ? "" : "3 5" }));
-            const label = svgEl("text", { x: 46, y: lineY + 4, "text-anchor": "end", fill: "#6f6a5f", "font-family": "Inter, sans-serif", "font-size": 12 });
+            chart.append(svgEl("line", { x1: 58, x2: 892, y1: lineY, y2: lineY, class: value === 0 ? "chart-axis" : "chart-grid" }));
+            const label = svgEl("text", { x: 46, y: lineY + 4, "text-anchor": "end", class: "chart-label" });
             label.textContent = String(Math.round(value));
             chart.append(label);
           });
@@ -546,19 +603,19 @@
               ...bandHours.map((slot) => `${x(slot.hour).toFixed(1)},${y(slot.high).toFixed(1)}`),
               ...[...bandHours].reverse().map((slot) => `${x(slot.hour).toFixed(1)},${y(slot.low).toFixed(1)}`),
             ].join(" ");
-            chart.append(svgEl("polygon", { points: band, fill: "rgba(224,74,14,.14)" }));
+            chart.append(svgEl("polygon", { points: band, class: "chart-band" }));
           }
 
-          chart.append(svgEl("polyline", { points: typical.map((slot) => `${x(slot.hour).toFixed(1)},${y(slot.median).toFixed(1)}`).join(" "), fill: "none", stroke: "#1c1a16", "stroke-width": 2.5, "stroke-dasharray": "7 6", "stroke-linecap": "round" }));
+          chart.append(svgEl("polyline", { points: typical.map((slot) => `${x(slot.hour).toFixed(1)},${y(slot.median).toFixed(1)}`).join(" "), class: "chart-typical" }));
 
           const barWidth = Math.min(30, (820 / Math.max(closeHour - openHour, 1)) * .55);
           today.forEach((entry) => {
-            chart.append(svgEl("rect", { x: (x(entry.hour) - barWidth / 2).toFixed(1), y: y(entry.visits).toFixed(1), width: barWidth.toFixed(1), height: Math.max(252 - y(entry.visits), 1).toFixed(1), rx: 3, fill: "#e04a0e" }));
+            chart.append(svgEl("rect", { x: (x(entry.hour) - barWidth / 2).toFixed(1), y: y(entry.visits).toFixed(1), width: barWidth.toFixed(1), height: Math.max(252 - y(entry.visits), 1).toFixed(1), rx: 3, class: "chart-today" }));
           });
 
           hours.forEach((hour) => {
             if ((hour - openHour) % 3 !== 0) return;
-            const label = svgEl("text", { x: x(hour), y: 282, "text-anchor": "middle", fill: "#6f6a5f", "font-family": "Inter, sans-serif", "font-size": 12 });
+            const label = svgEl("text", { x: x(hour), y: 282, "text-anchor": "middle", class: "chart-label" });
             label.textContent = clockLabel12(hour);
             chart.append(label);
           });
@@ -589,9 +646,8 @@
               if (!entry) { cell.className = "is-empty"; cell.setAttribute("aria-label", `${day} ${hour}:00: no recorded historical reading`); }
               else {
                 const ratio = max === min ? .5 : (entry.median - min) / (max - min);
-                const hue = Math.round(40 - ratio * 27);
-                const light = Math.round(89 - ratio * 52);
-                cell.style.backgroundColor = `hsl(${hue} 95% ${light}%)`;
+                cell.className = ratio > .5 ? "has-value is-hot" : "has-value";
+                cell.style.setProperty("--r", ratio.toFixed(3));
                 cell.title = `${day} ${clockLabel12(hour)} — about ${entry.median} walk-ins, from ${entry.n} day${entry.n === 1 ? "" : "s"}`;
                 cell.setAttribute("aria-label", cell.title);
               }
