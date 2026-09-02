@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="When to go to Crunch E 81st St: a measured record of walk-ins per hour, updated every 10 minutes." />
+    <meta name="theme-color" content="#f7f5f0" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1a1916" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23e04a0e'/%3E%3Crect x='7' y='17' width='4' height='8' rx='1' fill='%23fff'/%3E%3Crect x='14' y='11' width='4' height='14' rx='1' fill='%23fff'/%3E%3Crect x='21' y='7' width='4' height='18' rx='1' fill='%23fff'/%3E%3C/svg%3E" />
+    <title>81st Crowd Desk</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: oklch(21% .012 75);
+        --ink-2: oklch(42% .016 75);
+        --muted: oklch(55% .016 75);
+        --faint: oklch(72% .014 75);
+        --bg: oklch(96.8% .007 85);
+        --rule: oklch(87% .012 80);
+        --rule-soft: oklch(91% .01 80);
+        --today: oklch(62% .21 38);
+        --today-ink: oklch(50% .19 38);
+        --today-soft: oklch(94% .04 45);
+        --band: oklch(21% .012 75 / .09);
+        --heat-0: oklch(95% .015 85);
+        --heat-1: oklch(90% .08 85);
+        --heat-2: oklch(76% .17 50);
+        --heat-3: oklch(50% .2 35);
+        --closed: oklch(93% .006 85);
+        --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Helvetica Neue", Arial, sans-serif;
+        --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          color-scheme: dark;
+          --ink: oklch(94% .008 85);
+          --ink-2: oklch(78% .012 80);
+          --muted: oklch(66% .014 80);
+          --faint: oklch(50% .014 80);
+          --bg: oklch(18.5% .008 70);
+          --rule: oklch(32% .012 70);
+          --rule-soft: oklch(26% .01 70);
+          --today: oklch(72% .19 42);
+          --today-ink: oklch(78% .17 45);
+          --today-soft: oklch(72% .19 42 / .13);
+          --band: oklch(94% .008 85 / .1);
+          --heat-0: oklch(25% .01 70);
+          --heat-1: oklch(36% .06 65);
+          --heat-2: oklch(58% .16 45);
+          --heat-3: oklch(80% .18 50);
+          --closed: oklch(21% .008 70);
+        }
+      }
+
+      * { box-sizing: border-box; }
+      html { background: var(--bg); color: var(--ink); }
+      body { margin: 0; font-family: var(--sans); font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+      [hidden] { display: none !important; }
+      .num { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+      .shell { width: min(880px, calc(100% - 40px)); margin: 0 auto; }
+      h1, h2, p { margin: 0; }
+      a { color: inherit; }
+
+      .masthead { align-items: baseline; border-bottom: 1px solid var(--rule); display: flex; flex-wrap: wrap; gap: 6px 24px; justify-content: space-between; padding: 22px 0 12px; }
+      .masthead h1 { font-size: .8rem; font-weight: 650; letter-spacing: .1em; text-transform: uppercase; }
+      .masthead h1 span { color: var(--today-ink); }
+      .masthead p { color: var(--muted); font-family: var(--mono); font-size: .74rem; }
+
+      .answer { padding: 56px 0 36px; }
+      .answer .state { color: var(--muted); font-family: var(--mono); font-size: .78rem; letter-spacing: .04em; margin-bottom: 14px; text-transform: uppercase; }
+      .answer .state b { color: var(--today-ink); font-weight: 600; }
+      .answer .state b.is-closed { color: var(--muted); }
+      .headline { font-size: clamp(2.2rem, 6vw, 3.6rem); font-weight: 720; letter-spacing: -.03em; line-height: 1.02; max-width: 16ch; text-wrap: balance; }
+      .support { color: var(--ink-2); font-size: clamp(1.02rem, 1.6vw, 1.18rem); line-height: 1.45; margin-top: 18px; max-width: 52ch; text-wrap: pretty; }
+      .support .num { color: var(--ink); font-weight: 600; }
+
+      .ledger { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .ledger > div { padding: 16px 0; }
+      .ledger > div + div { border-left: 1px solid var(--rule-soft); padding-left: 22px; }
+      .ledger dt { color: var(--muted); font-size: .72rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+      .ledger dd { margin: 6px 0 0; font-size: 1.05rem; font-weight: 600; }
+      .ledger dd small { color: var(--muted); display: block; font-family: var(--mono); font-size: .74rem; font-weight: 500; margin-top: 3px; }
+
+      section.block { padding: 44px 0 0; }
+      .block-head { align-items: baseline; display: flex; flex-wrap: wrap; gap: 4px 20px; justify-content: space-between; margin-bottom: 14px; }
+      .block-head h2 { font-size: 1.05rem; font-weight: 700; letter-spacing: -.01em; }
+      .block-head p { color: var(--muted); font-family: var(--mono); font-size: .76rem; }
+
+      .chart svg { display: block; height: auto; overflow: visible; width: 100%; }
+      .chart-grid { stroke: var(--rule); stroke-width: 1; stroke-dasharray: 2 6; }
+      .chart-axis { stroke: var(--ink); stroke-width: 1.25; }
+      .chart-label { fill: var(--muted); font-family: var(--mono); font-size: 12px; }
+      .chart-band { fill: var(--band); }
+      .chart-typical { fill: none; stroke: var(--ink); stroke-width: 2; stroke-dasharray: 6 6; stroke-linecap: round; }
+      .chart-today { fill: var(--today); }
+      .chart-today.is-partial { fill: var(--today); opacity: .4; }
+      .chart-now { stroke: var(--today); stroke-width: 1.25; stroke-dasharray: 3 4; }
+      .chart-now-label { fill: var(--today-ink); font-family: var(--mono); font-size: 11.5px; font-weight: 600; letter-spacing: .06em; }
+      .chart-pick { fill: var(--today-soft); }
+      .chart-pick-label { fill: var(--today-ink); font-family: var(--mono); font-size: 11.5px; font-weight: 600; letter-spacing: .06em; }
+      .chart-closed { fill: var(--closed); }
+      .legend { color: var(--muted); display: flex; flex-wrap: wrap; font-size: .8rem; gap: 6px 22px; margin-top: 10px; }
+      .legend span { align-items: center; display: inline-flex; gap: 8px; }
+      .legend i { display: inline-block; height: 10px; width: 14px; }
+      .legend i.bar { background: var(--today); border-radius: 2px; }
+      .legend i.bar.partial { opacity: .4; }
+      .legend i.line { border-top: 2px dashed var(--ink); height: 0; }
+      .legend i.band { background: var(--band); }
+      .chart-empty { color: var(--muted); font-size: .95rem; max-width: 56ch; padding: 40px 0; text-wrap: pretty; }
+
+      .heat-scroll { overflow-x: auto; }
+      .heat { border-collapse: separate; border-spacing: 3px; font-family: var(--mono); font-size: .7rem; min-width: 520px; width: 100%; }
+      .heat th { color: var(--faint); font-weight: 500; padding: 0 0 6px; text-align: center; }
+      .heat th[scope="row"] { color: var(--muted); padding-right: 10px; text-align: left; width: 34px; }
+      .heat td { --r: 0; background: color-mix(in oklch, var(--heat-2) calc(var(--r) * 100%), var(--heat-1)); border-radius: 3px; height: 26px; min-width: 20px; padding: 0; }
+      .heat td.is-hot { background: color-mix(in oklch, var(--heat-3) calc((var(--r) - .5) * 200%), var(--heat-2)); }
+      .heat td.is-empty { background: var(--heat-0); }
+      .heat td.is-closed { background: transparent; }
+      .heat td.is-now { outline: 2px solid var(--ink); outline-offset: 1px; }
+      .heat-foot { color: var(--muted); display: flex; flex-wrap: wrap; font-size: .8rem; gap: 6px 22px; justify-content: space-between; margin-top: 10px; }
+      .heat-foot .scale { align-items: center; display: inline-flex; gap: 8px; }
+      .heat-foot .scale i { background: linear-gradient(90deg in oklch, var(--heat-1), var(--heat-2) 50%, var(--heat-3)); border-radius: 3px; display: inline-block; height: 8px; width: 90px; }
+      .heat-foot .now { align-items: center; display: inline-flex; gap: 8px; }
+      .heat-foot .now i { border: 2px solid var(--ink); border-radius: 3px; display: inline-block; height: 12px; width: 12px; }
+
+      .fine { border-top: 1px solid var(--rule); color: var(--ink-2); font-size: .9rem; line-height: 1.6; margin-top: 52px; padding: 22px 0 36px; }
+      .fine p { max-width: 68ch; text-wrap: pretty; }
+      .fine p + p { margin-top: 10px; }
+      .fine b { color: var(--ink); font-weight: 600; }
+      .fine .num { color: var(--ink); }
+
+      .sr-only { height: 1px; margin: -1px; overflow: hidden; padding: 0; position: absolute; width: 1px; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+
+      @media (max-width: 640px) {
+        .shell { width: min(100% - 28px, 880px); }
+        .answer { padding: 40px 0 28px; }
+        .ledger { grid-template-columns: 1fr; }
+        .ledger > div { padding: 12px 0; }
+        .ledger > div + div { border-left: 0; border-top: 1px solid var(--rule-soft); padding-left: 0; }
+        .chart-label { font-size: 20px; }
+        .chart-now-label, .chart-pick-label { font-size: 19px; }
+      }
+      @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+    </style>
+  </head>
+  <body>
+    <header class="shell masthead">
+      <h1>81st <span>/</span> Crowd Desk</h1>
+      <p id="mast-meta">Crunch E 81st St · New York</p>
+    </header>
+
+    <main class="shell">
+      <section class="answer" aria-live="polite">
+        <p class="state" id="state">Loading the record…</p>
+        <h2 class="headline" id="headline">Reading the last 90 days</h2>
+        <p class="support" id="support"></p>
+      </section>
+
+      <dl class="ledger" id="ledger">
+        <div><dt>Last reading</dt><dd><span class="num" id="l-count">—</span><small id="l-count-note">waiting for data</small></dd></div>
+        <div><dt>Last full hour</dt><dd><span class="num" id="l-hour">—</span><small id="l-hour-note">walk-ins vs normal</small></dd></div>
+        <div><dt>Record so far</dt><dd><span class="num" id="l-record">—</span><small id="l-record-note">days recorded</small></dd></div>
+      </dl>
+
+      <section class="block chart" aria-labelledby="chart-heading">
+        <div class="block-head"><h2 id="chart-heading">Today, hour by hour</h2><p id="chart-meta"></p></div>
+        <p class="chart-empty" id="chart-empty" hidden></p>
+        <svg id="chart" viewBox="0 0 920 372" role="img" aria-labelledby="chart-title chart-desc" hidden>
+          <title id="chart-title">Walk-ins per hour today against a normal day</title>
+          <desc id="chart-desc"></desc>
+        </svg>
+        <div class="legend" id="legend" hidden>
+          <span><i class="bar"></i>Today, walk-ins per hour</span>
+          <span id="legend-partial" hidden><i class="bar partial"></i>Hour in progress</span>
+          <span><i class="line"></i>Normal for this weekday</span>
+          <span id="legend-band" hidden><i class="band"></i>Usual range</span>
+        </div>
+      </section>
+
+      <section class="block" aria-labelledby="week-heading">
+        <div class="block-head"><h2 id="week-heading">A typical week</h2><p id="week-meta">walk-ins per hour, median of recorded days</p></div>
+        <div class="heat-scroll">
+          <table class="heat" id="heat"><caption class="sr-only">Median walk-ins per hour by weekday and hour, New York time</caption></table>
+        </div>
+        <div class="heat-foot" id="heat-foot" hidden>
+          <span class="scale">Quieter <i></i> Busier</span>
+          <span class="now"><i></i>This hour</span>
+        </div>
+        <p class="chart-empty" id="heat-empty" hidden></p>
+      </section>
+
+      <aside class="fine" id="fine" aria-label="About this record">
+        <p id="fine-1"></p>
+        <p id="fine-2"></p>
+        <p id="fine-3">Every 10 minutes the club’s own public counter is read and saved. The counter totals visits since opening, so this page reports the change per hour, not people in the room. Nothing here is a capacity claim or a forecast made from unobserved data.</p>
+      </aside>
+    </main>
+
+    <script>
+      (() => {
+        "use strict";
+        const LIVE_DATA_ORIGIN = "https://crunch-81st-crowd-api.ozanpochette.workers.dev/v1";
+        const NEW_YORK = "America/New_York";
+        const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+        const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+        const OPEN_HOURS = [[5, 23], [5, 23], [5, 23], [5, 23], [5, 22], [7, 21], [8, 21]];
+        const WEEK_HOURS = { first: 5, last: 22 };
+        const $ = (id) => document.getElementById(id);
+
+        const clockFmt = new Intl.DateTimeFormat("en-US", { timeZone: NEW_YORK, weekday: "short", hour: "numeric", hourCycle: "h23", minute: "2-digit" });
+        const dateKeyFmt = new Intl.DateTimeFormat("en-CA", { timeZone: NEW_YORK, year: "numeric", month: "2-digit", day: "2-digit" });
+        const stampFmt = new Intl.DateTimeFormat("en-US", { timeZone: NEW_YORK, weekday: "short", hour: "numeric", minute: "2-digit" });
+        const longStampFmt = new Intl.DateTimeFormat("en-US", { timeZone: NEW_YORK, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+        const dateFmt = new Intl.DateTimeFormat("en-US", { timeZone: NEW_YORK, month: "short", day: "numeric" });
+
+        const nyClock = (date) => {
+          const parts = Object.fromEntries(clockFmt.formatToParts(date).filter((p) => p.type !== "literal").map((p) => [p.type, p.value]));
+          const hour = Number(parts.hour) % 24;
+          return { weekdayIndex: DAYS.indexOf(parts.weekday), hour, minute: Number(parts.minute), dateKey: dateKeyFmt.format(date) };
+        };
+        const hourLabel = (hour) => `${hour % 12 || 12} ${hour < 12 ? "AM" : "PM"}`;
+        const fmtInt = (n) => new Intl.NumberFormat("en-US").format(Math.round(n));
+        const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+        const median = (values) => { const s = [...values].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+        const quantile = (sorted, q) => sorted[Math.min(sorted.length - 1, Math.floor(q * (sorted.length - 1)))];
+
+        async function fetchText(path) {
+          const response = await fetch(path, { cache: "no-store" });
+          if (!response.ok) throw new Error(`Could not load ${path}`);
+          return response.text();
+        }
+
+        function parseCSV(text) {
+          if (typeof text !== "string") return null;
+          const lines = text.trim().split(/\r?\n/);
+          if (lines[0]?.trim() !== "timestamp_utc,occupancy,status") return null;
+          const rows = [];
+          for (const line of lines.slice(1)) {
+            const cols = line.split(",");
+            if (cols.length !== 3) return null;
+            const date = new Date(cols[0]);
+            const count = Number(cols[1]);
+            if (Number.isNaN(date.getTime()) || !Number.isInteger(count) || count < 0 || !cols[2].trim()) return null;
+            rows.push({ date, occupancy: count, status: cols[2].trim() });
+          }
+          return rows.sort((a, b) => a.date - b.date);
+        }
+
+        function parseInsights(text) {
+          try { const v = JSON.parse(text); return v && typeof v === "object" && !Array.isArray(v) ? v : {}; } catch (_) { return {}; }
+        }
+
+        // ---------- pure derivation ----------
+
+        function hourlyVisits(readings) {
+          const out = [];
+          for (let i = 1; i < readings.length; i += 1) {
+            const a = nyClock(readings[i - 1].date);
+            const b = nyClock(readings[i].date);
+            if (a.dateKey !== b.dateKey) continue;
+            out.push({ dateKey: b.dateKey, weekdayIndex: b.weekdayIndex, hour: b.hour, visits: Math.max(0, readings[i].occupancy - readings[i - 1].occupancy) });
+          }
+          return out;
+        }
+
+        function buildViewModel(readings, insights, now) {
+          const clock = nyClock(now);
+          const visits = hourlyVisits(readings);
+          const latest = readings.at(-1);
+          const dateKeys = new Set(readings.map((r) => nyClock(r.date).dateKey));
+
+          // per weekday+hour: map dateKey -> visits
+          const byDayHour = new Map();
+          const byWeekdayHour = new Map();
+          const dayHourMeta = new Map();
+          for (const v of visits) {
+            const k1 = `${v.dateKey}-${v.hour}`;
+            byDayHour.set(k1, (byDayHour.get(k1) || 0) + v.visits);
+            dayHourMeta.set(k1, v);
+          }
+          for (const [key, total] of byDayHour) {
+            const meta = dayHourMeta.get(key);
+            const k2 = `${meta.weekdayIndex}-${meta.hour}`;
+            const bucket = byWeekdayHour.get(k2) || new Map();
+            bucket.set(meta.dateKey, total);
+            byWeekdayHour.set(k2, bucket);
+          }
+
+          const typicalFor = (weekdayIndex, hour, excludeDateKey) => {
+            const bucket = byWeekdayHour.get(`${weekdayIndex}-${hour}`);
+            if (!bucket) return null;
+            const values = [...bucket.entries()].filter(([k]) => k !== excludeDateKey).map(([, v]) => v);
+            if (!values.length) return null;
+            const sorted = [...values].sort((a, b) => a - b);
+            return { median: median(values), low: quantile(sorted, .25), high: quantile(sorted, .75), n: values.length };
+          };
+
+          const [openH, closeH] = OPEN_HOURS[clock.weekdayIndex];
+          const status = clock.hour < openH ? "pre-open" : clock.hour >= closeH ? "closed" : "open";
+
+          // today
+          const todayHours = [];
+          for (let h = openH; h < closeH; h += 1) {
+            const key = `${clock.dateKey}-${h}`;
+            todayHours.push({ hour: h, visits: byDayHour.has(key) ? byDayHour.get(key) : null });
+          }
+          const typicalHours = [];
+          for (let h = openH; h < closeH; h += 1) {
+            const t = typicalFor(clock.weekdayIndex, h, clock.dateKey);
+            if (t) typicalHours.push({ hour: h, ...t });
+          }
+          const weekdayDates = new Set();
+          typicalHours.forEach((t) => byWeekdayHour.get(`${clock.weekdayIndex}-${t.hour}`).forEach((_, k) => k !== clock.dateKey && weekdayDates.add(k)));
+
+          const remaining = typicalHours.filter((t) => t.hour >= clock.hour);
+          const pick = remaining.length ? remaining.reduce((a, b) => (b.median < a.median ? b : a)) : null;
+
+          // last full hour vs normal
+          const lastHour = clock.hour - 1;
+          const lastKey = `${clock.dateKey}-${lastHour}`;
+          const lastVisits = byDayHour.has(lastKey) ? byDayHour.get(lastKey) : null;
+          const lastTypical = lastHour >= openH ? typicalFor(clock.weekdayIndex, lastHour, clock.dateKey) : null;
+
+          // week heat
+          const week = DAYS.map((_, wd) => {
+            const [o, c] = OPEN_HOURS[wd];
+            const cells = [];
+            for (let h = WEEK_HOURS.first; h <= WEEK_HOURS.last; h += 1) {
+              if (h < o || h >= c) { cells.push({ hour: h, closed: true }); continue; }
+              const t = typicalFor(wd, h, null);
+              cells.push({ hour: h, closed: false, median: t ? t.median : null, n: t ? t.n : 0 });
+            }
+            return { weekdayIndex: wd, cells };
+          });
+          const weekValues = week.flatMap((r) => r.cells.filter((c) => !c.closed && Number.isFinite(c.median)).map((c) => c.median));
+
+          // yesterday recap for closed state
+          const todayTotal = latest && nyClock(latest.date).dateKey === clock.dateKey ? latest.occupancy : null;
+          const typicalDayTotal = (() => {
+            const totals = new Map();
+            for (const v of visits) if (v.weekdayIndex === clock.weekdayIndex && v.dateKey !== clock.dateKey) totals.set(v.dateKey, (totals.get(v.dateKey) || 0) + v.visits);
+            return totals.size ? median([...totals.values()]) : null;
+          })();
+
+          // next open
+          const nextWeekday = status === "closed" ? (clock.weekdayIndex + 1) % 7 : clock.weekdayIndex;
+          const nextOpenHour = OPEN_HOURS[nextWeekday][0];
+          const nextTypical = [];
+          for (let h = OPEN_HOURS[nextWeekday][0]; h < OPEN_HOURS[nextWeekday][1]; h += 1) { const t = typicalFor(nextWeekday, h, null); if (t) nextTypical.push({ hour: h, ...t }); }
+          const morning = nextTypical.filter((t) => t.hour < 12);
+          const nextPick = (morning.length ? morning : nextTypical).length ? (morning.length ? morning : nextTypical).reduce((a, b) => (b.median < a.median ? b : a)) : null;
+
+          return {
+            clock, status, openH, closeH, latest, latestClock: latest ? nyClock(latest.date) : null,
+            todayHours, typicalHours, weekdayDates: weekdayDates.size, pick,
+            lastHour, lastVisits, lastTypical,
+            week, weekMin: weekValues.length ? Math.min(...weekValues) : 0, weekMax: weekValues.length ? Math.max(...weekValues) : 0,
+            todayTotal, typicalDayTotal, nextWeekday, nextOpenHour, nextPick,
+            record: { days: dateKeys.size, readings: readings.length, first: readings[0]?.date || null },
+            insights,
+          };
+        }
+
+        // ---------- rendering ----------
+
+        function svgEl(name, attrs = {}) {
+          const node = document.createElementNS("http://www.w3.org/2000/svg", name);
+          for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+          return node;
+        }
+        const bold = (text) => { const b = document.createElement("b"); b.textContent = text; return b; };
+        const numSpan = (text) => { const s = document.createElement("span"); s.className = "num"; s.textContent = text; return s; };
+
+        function renderAnswer(vm) {
+          const state = $("state"); const head = $("headline"); const support = $("support");
+          const day = DAY_NAMES[vm.clock.weekdayIndex];
+          const evidence = vm.weekdayDates ? ` Based on ${plural(vm.weekdayDates, day)}.` : "";
+          state.replaceChildren();
+          const b = document.createElement("b");
+          if (vm.status === "open") {
+            b.textContent = "Open now";
+            state.append(b, ` · closes ${hourLabel(vm.closeH)}`);
+            if (!vm.pick) {
+              head.textContent = `No ${day} history yet`;
+              support.textContent = `Today’s readings become next ${day}’s forecast. The week view below shows what other days look like.`;
+              return;
+            }
+            const isNow = vm.pick.hour === vm.clock.hour;
+            head.textContent = isNow ? "Now is a good time" : `Go around ${hourLabel(vm.pick.hour)}`;
+            support.replaceChildren(
+              isNow ? "This hour is usually the quietest left today, about " : `Usually about `,
+              numSpan(fmtInt(vm.pick.median)), ` walk-ins ${isNow ? "an hour" : "that hour"}, the ${isNow ? "lowest" : "quietest"} left today.${evidence}`,
+            );
+            return;
+          }
+          if (vm.status === "pre-open") {
+            b.className = "is-closed"; b.textContent = "Closed";
+            state.append(b, ` · opens ${hourLabel(vm.openH)}`);
+            head.textContent = `Opens at ${hourLabel(vm.openH)}`;
+            if (vm.nextPick) support.replaceChildren(`Quietest morning hour is usually `, numSpan(hourLabel(vm.nextPick.hour)), `, about `, numSpan(fmtInt(vm.nextPick.median)), ` walk-ins.${evidence}`);
+            else support.textContent = `No ${day} history yet. Today’s readings become next week’s forecast.`;
+            return;
+          }
+          b.className = "is-closed"; b.textContent = "Closed";
+          state.append(b, ` · opens ${hourLabel(vm.nextOpenHour)} ${DAY_NAMES[vm.nextWeekday]}`);
+          head.textContent = `Closed until ${hourLabel(vm.nextOpenHour)}`;
+          const parts = [];
+          if (vm.todayTotal !== null) {
+            parts.push(`${day} ended at `, numSpan(fmtInt(vm.todayTotal)), ` check-ins`);
+            if (vm.typicalDayTotal !== null) parts.push(`, normal is about `, numSpan(fmtInt(vm.typicalDayTotal)));
+            parts.push(". ");
+          }
+          if (vm.nextPick) parts.push(`Tomorrow’s quietest morning hour is usually `, numSpan(hourLabel(vm.nextPick.hour)), `, about `, numSpan(fmtInt(vm.nextPick.median)), ` walk-ins.`);
+          support.replaceChildren(...parts);
+        }
+
+        function renderLedger(vm) {
+          const stale = vm.latestClock.dateKey !== vm.clock.dateKey;
+          $("l-count").textContent = fmtInt(vm.latest.occupancy);
+          $("l-count-note").textContent = `${stale ? "yesterday’s total" : "check-ins since opening"} · ${stampFmt.format(vm.latest.date)}`;
+          if (vm.lastVisits !== null && vm.lastTypical) {
+            const delta = vm.lastVisits - vm.lastTypical.median;
+            $("l-hour").textContent = `${fmtInt(vm.lastVisits)} walk-ins`;
+            $("l-hour-note").textContent = `${hourLabel(vm.lastHour)} · ${delta === 0 ? "right at" : `${delta > 0 ? "+" : "−"}${fmtInt(Math.abs(delta))} vs`} normal ${fmtInt(vm.lastTypical.median)}`;
+          } else if (vm.lastVisits !== null) {
+            $("l-hour").textContent = `${fmtInt(vm.lastVisits)} walk-ins`;
+            $("l-hour-note").textContent = `${hourLabel(vm.lastHour)} · no normal yet for this hour`;
+          } else {
+            $("l-hour").textContent = "—";
+            $("l-hour-note").textContent = vm.status === "open" ? "first full hour still in progress" : "gym is closed";
+          }
+          $("l-record").textContent = plural(vm.record.days, "day");
+          $("l-record-note").textContent = `${fmtInt(vm.record.readings)} readings since ${dateFmt.format(vm.record.first)}`;
+        }
+
+        function renderChart(vm) {
+          const chart = $("chart"); const empty = $("chart-empty"); const legend = $("legend");
+          const day = DAY_NAMES[vm.clock.weekdayIndex];
+          $("chart-meta").textContent = vm.weekdayDates ? `normal ${DAYS[vm.clock.weekdayIndex]} from ${plural(vm.weekdayDates, "day")}` : "";
+          const hasToday = vm.todayHours.some((h) => h.visits !== null);
+          if (!vm.typicalHours.length && !hasToday) {
+            chart.setAttribute("hidden", ""); legend.hidden = true; empty.hidden = false;
+            empty.textContent = `No ${day} recorded yet. The normal line appears after the first full ${day}.`;
+            return;
+          }
+          empty.hidden = true; chart.removeAttribute("hidden"); legend.hidden = false;
+          chart.replaceChildren(svgEl("title", { id: "chart-title" }), svgEl("desc", { id: "chart-desc" }));
+          chart.querySelector("title").textContent = `Walk-ins per hour today against a normal ${day}`;
+
+          const L = 44, R = 904, T = 30, B = 316;
+          const span = vm.closeH - vm.openH;
+          const x = (h) => L + ((h - vm.openH) / span) * (R - L);
+          const maxV = Math.max(5, ...vm.typicalHours.map((t) => t.high), ...vm.todayHours.map((t) => t.visits || 0));
+          const upper = Math.max(10, Math.ceil((maxV * 1.15) / 10) * 10);
+          const y = (v) => B - (v / upper) * (B - T);
+          const slot = (R - L) / span;
+
+          if (vm.pick && vm.status === "open") {
+            chart.append(svgEl("rect", { x: x(vm.pick.hour), y: T - 18, width: slot, height: B - T + 18, class: "chart-pick" }));
+            const lbl = svgEl("text", { x: x(vm.pick.hour) + slot / 2, y: T - 24, "text-anchor": "middle", class: "chart-pick-label" });
+            lbl.textContent = "GO"; chart.append(lbl);
+          }
+          [0, upper / 2, upper].forEach((v) => {
+            chart.append(svgEl("line", { x1: L, x2: R, y1: y(v), y2: y(v), class: v === 0 ? "chart-axis" : "chart-grid" }));
+            const t = svgEl("text", { x: L - 10, y: y(v) + 4, "text-anchor": "end", class: "chart-label" }); t.textContent = fmtInt(v); chart.append(t);
+          });
+          const band = vm.typicalHours.filter((t) => t.n >= 3);
+          if (band.length >= 2) {
+            $("legend-band").hidden = false;
+            const pts = [...band.map((t) => `${(x(t.hour) + slot / 2).toFixed(1)},${y(t.high).toFixed(1)}`), ...[...band].reverse().map((t) => `${(x(t.hour) + slot / 2).toFixed(1)},${y(t.low).toFixed(1)}`)];
+            chart.append(svgEl("polygon", { points: pts.join(" "), class: "chart-band" }));
+          } else $("legend-band").hidden = true;
+          if (vm.typicalHours.length >= 2) {
+            chart.append(svgEl("polyline", { points: vm.typicalHours.map((t) => `${(x(t.hour) + slot / 2).toFixed(1)},${y(t.median).toFixed(1)}`).join(" "), class: "chart-typical" }));
+          }
+          const bw = Math.min(28, slot * .58);
+          vm.todayHours.forEach((t) => {
+            if (t.visits === null || t.hour > vm.clock.hour) return;
+            chart.append(svgEl("rect", { x: (x(t.hour) + slot / 2 - bw / 2).toFixed(1), y: y(t.visits).toFixed(1), width: bw.toFixed(1), height: Math.max(B - y(t.visits), 1.5).toFixed(1), rx: 2.5, class: t.hour === vm.clock.hour && vm.status === "open" ? "chart-today is-partial" : "chart-today" }));
+          });
+          $("legend-partial").hidden = !(vm.status === "open" && vm.todayHours.some((t) => t.hour === vm.clock.hour && t.visits !== null));
+          if (vm.status === "open") {
+            const nx = x(vm.clock.hour + vm.clock.minute / 60);
+            chart.append(svgEl("line", { x1: nx, x2: nx, y1: T - 4, y2: B, class: "chart-now" }));
+            const t = svgEl("text", { x: nx, y: B + 40, "text-anchor": "middle", class: "chart-now-label" }); t.textContent = "NOW"; chart.append(t);
+          }
+          for (let h = vm.openH; h <= vm.closeH; h += 1) {
+            if ((h - vm.openH) % 3 !== 0 && h !== vm.closeH) continue;
+            const t = svgEl("text", { x: x(h), y: B + 22, "text-anchor": h === vm.closeH ? "end" : h === vm.openH ? "start" : "middle", class: "chart-label" });
+            t.textContent = hourLabel(h); chart.append(t);
+          }
+          const total = vm.todayHours.reduce((s, t) => s + (t.visits || 0), 0);
+          chart.querySelector("desc").textContent = `Orange bars show walk-ins each hour today, ${fmtInt(total)} so far. The dashed line is a normal ${day} from ${plural(vm.weekdayDates, "recorded day")}.`;
+        }
+
+        function renderWeek(vm) {
+          const table = $("heat");
+          if (!vm.weekMax) { $("heat-empty").hidden = false; $("heat-empty").textContent = "No hourly history yet."; $("heat-foot").hidden = true; return; }
+          $("heat-empty").hidden = true; $("heat-foot").hidden = false;
+          const thead = document.createElement("thead"); const hr = document.createElement("tr"); hr.append(document.createElement("th"));
+          for (let h = WEEK_HOURS.first; h <= WEEK_HOURS.last; h += 1) { const th = document.createElement("th"); th.scope = "col"; th.textContent = `${h % 12 || 12}${h < 12 ? "a" : "p"}`; hr.append(th); }
+          thead.append(hr);
+          const tbody = document.createElement("tbody");
+          vm.week.forEach((row) => {
+            const tr = document.createElement("tr");
+            const th = document.createElement("th"); th.scope = "row"; th.textContent = DAYS[row.weekdayIndex]; tr.append(th);
+            row.cells.forEach((cell) => {
+              const td = document.createElement("td");
+              const isNow = vm.status === "open" && row.weekdayIndex === vm.clock.weekdayIndex && cell.hour === vm.clock.hour;
+              if (cell.closed) { td.className = "is-closed"; td.setAttribute("aria-label", `${DAYS[row.weekdayIndex]} ${hourLabel(cell.hour)}: closed`); }
+              else if (cell.median === null) { td.className = "is-empty"; td.setAttribute("aria-label", `${DAYS[row.weekdayIndex]} ${hourLabel(cell.hour)}: not recorded yet`); }
+              else {
+                const r = vm.weekMax === vm.weekMin ? .5 : (cell.median - vm.weekMin) / (vm.weekMax - vm.weekMin);
+                td.className = r > .5 ? "is-hot" : "";
+                td.style.setProperty("--r", r.toFixed(3));
+                td.title = `${DAYS[row.weekdayIndex]} ${hourLabel(cell.hour)}: about ${fmtInt(cell.median)} walk-ins, from ${plural(cell.n, "day")}`;
+                td.setAttribute("aria-label", td.title);
+              }
+              if (isNow) td.classList.add("is-now");
+              tr.append(td);
+            });
+            tbody.append(tr);
+          });
+          table.replaceChildren(table.querySelector("caption"), thead, tbody);
+          $("week-meta").textContent = `walk-ins per hour · ${fmtInt(vm.weekMin)} to ${fmtInt(vm.weekMax)} · median of recorded days`;
+        }
+
+        function renderFine(vm) {
+          const ins = vm.insights || {};
+          const prog = ins.recommendation_progress;
+          const quiet = ins.quiet_window_details;
+          const f1 = $("fine-1"); f1.replaceChildren();
+          if (quiet && quiet.status === "ready" && Array.isArray(quiet.items) && quiet.items.length) {
+            f1.append(bold("Reliable quiet windows. "));
+            f1.append(`${plural(quiet.items.length, "hour")} of the week ${quiet.items.length === 1 ? "has" : "have"} now been quiet on 4 or more separate days. ${quiet.items.slice(0, 3).map((i) => { const [wd, h] = i.slot.split("-").map(Number); return `${DAYS[wd]} ${hourLabel(h)}`; }).join(", ")}${quiet.items.length > 3 ? " and more" : ""}.`);
+          } else if (prog && prog.status === "collecting" && Number.isInteger(prog.matching_dates)) {
+            f1.append(bold("Evidence rule. "));
+            f1.append(`An hour is only called reliably quiet after it has been quiet on 4 separate days. Best candidate so far: seen on `, numSpan(`${prog.matching_dates} of 4`), ` days.`);
+          } else {
+            f1.append(bold("Evidence rule. "));
+            f1.append("An hour is only called reliably quiet after it has been quiet on 4 separate days. Until then, every number above is an early estimate.");
+          }
+          const f2 = $("fine-2"); f2.replaceChildren();
+          const wp = ins.weather_progress; const fc = ins.factor_context; const corr = ins.correlations;
+          f2.append(bold("Context, not causes. "));
+          if (corr && corr.status === "observed" && Number.isFinite(corr.effect)) {
+            f2.append(`Observed association, not proof: rainy days averaged about `, numSpan(fmtInt(Math.abs(corr.effect))), ` ${corr.effect >= 0 ? "more" : "fewer"} check-ins. `);
+          } else if (wp && Number.isInteger(wp.rainy_dates) && Number.isInteger(wp.dry_dates)) {
+            f2.append(`Weather is saved daily. A rain comparison needs 20 rainy and 20 dry days; so far `, numSpan(`${wp.rainy_dates}`), ` rainy and `, numSpan(`${wp.dry_dates}`), ` dry. `);
+          }
+          if (fc && Number.isInteger(fc.holiday_dates) && Number.isInteger(fc.non_holiday_dates)) {
+            f2.append(`Holidays recorded: `, numSpan(`${fc.holiday_dates}`), ` of `, numSpan(`${fc.holiday_dates + fc.non_holiday_dates}`), ` days.`);
+          }
+          const gen = ins.generated_at ? new Date(ins.generated_at) : null;
+          $("mast-meta").textContent = gen && !Number.isNaN(gen.getTime()) ? `Crunch E 81st St · updated ${longStampFmt.format(gen)}` : "Crunch E 81st St · New York";
+        }
+
+        function renderUnavailable() {
+          $("state").textContent = "Live data";
+          $("headline").textContent = "The record couldn’t load";
+          $("support").textContent = "No count is shown until the public readings file loads and validates. Refresh to retry.";
+          $("chart-empty").hidden = false; $("chart-empty").textContent = "Live data couldn’t load.";
+          $("heat-empty").hidden = false; $("heat-empty").textContent = "Live data couldn’t load.";
+          $("fine-1").textContent = ""; $("fine-2").textContent = "";
+        }
+
+        globalThis.__CROWD_DESK_V2__ = { buildViewModel, parseCSV, hourlyVisits };
+
+        async function init() {
+          const [csvResult, insightsResult] = await Promise.allSettled([
+            fetchText(`${LIVE_DATA_ORIGIN}/readings.csv?days=90`),
+            fetchText(`${LIVE_DATA_ORIGIN}/insights.json?days=90`),
+          ]);
+          const readings = csvResult.status === "fulfilled" ? parseCSV(csvResult.value) : null;
+          if (!readings || !readings.length) { renderUnavailable(); return; }
+          const insights = insightsResult.status === "fulfilled" ? parseInsights(insightsResult.value) : {};
+          const at = new URLSearchParams(location.search).get("at");
+          const now = at && !Number.isNaN(new Date(at).getTime()) ? new Date(at) : new Date();
+          const scoped = at ? readings.filter((r) => r.date <= now) : readings;
+          if (!scoped.length) { renderUnavailable(); return; }
+          const vm = buildViewModel(scoped, insights, now);
+          renderAnswer(vm); renderLedger(vm); renderChart(vm); renderWeek(vm); renderFine(vm);
+        }
+        init();
+      })();
+    </script>
+  </body>
+</html>
