@@ -15,6 +15,15 @@ weather comparison as “Observed association, not proof”; independent local
 dates are its evidence threshold. The quiet-window stability view shows the
 historical range.
 
+## Redesign candidate
+
+[`docs/v2.html`](docs/v2.html) is a single-column redesign of the same
+dashboard, reading the same live endpoints: one answer, one hour-by-hour
+chart with a "now" marker and the recommended window, one weekly heatmap,
+and fine print. It keeps every number in one unit (walk-ins per hour) and
+separates a pure view-model builder from rendering. Append `?at=<ISO time>`
+to preview how it reads at another moment, using only readings up to then.
+
 ## Source and collection
 
 Live collection runs on a Cloudflare Worker Cron and is stored in Cloudflare
