@@ -72,7 +72,9 @@ assert.equal(open.status, "open");
 assert.equal(open.clock.weekdayIndex, 1);
 assert.equal(open.clock.hour, 18);
 assert.ok(open.pick, "an open gym with history must produce a pick");
-assert.equal(open.pick.hour, 22, "quietest remaining hour follows the profile");
+assert.equal(open.pick.hour, 21, "quietest remaining hour follows the profile, skipping the last hour before close");
+assert.equal(open.pick.from, 21);
+assert.equal(open.pick.to, 22);
 assert.ok(open.pick.n >= 3, "pick evidence counts prior Tuesdays only");
 assert.equal(open.weekdayDates, 3);
 assert.equal(open.lastHour, 17);
@@ -83,18 +85,38 @@ assert.equal(open.todayHours.find((h) => h.hour === 19).visits, null, "future ho
 // Dayparts: one row per part of the open day, passed parts flagged, best hour in each.
 assert.equal(JSON.stringify(open.dayparts.map((d) => d.label)), JSON.stringify(["Early", "Morning", "Midday", "Afternoon", "Evening", "Late"]));
 assert.equal(JSON.stringify(open.dayparts.map((d) => d.passed)), JSON.stringify([true, true, true, true, false, false]));
-assert.equal(open.dayparts.find((d) => d.label === "Late").best.hour, 22);
+assert.equal(open.dayparts.find((d) => d.label === "Late").best.hour, 21, "the last hour before close is never a daypart's best");
+assert.equal(open.dayparts.find((d) => d.label === "Late").end, 22);
 assert.equal(open.dayparts.find((d) => d.label === "Afternoon").best.hour, 14);
 assert.equal(open.dayparts.find((d) => d.label === "Evening").current, true);
 
-// Weekday summary skips the opening hour so 5 AM is not the answer every day.
+// Weekday shapes: the opening hour is fully measured now, so it can be the calm
+// answer; the calm stretch is the longest run near the quietest usable hour.
 const tue = open.weekdaySummary.find((r) => r.weekdayIndex === 1);
 assert.ok(tue, "Tuesday appears in the weekday summary");
-assert.notEqual(tue.quiet.hour, 5, "opening hour is left out of quietest");
-assert.equal(tue.quiet.hour, 22);
+assert.equal(tue.cells[0].hour, 5);
+assert.ok(tue.cells[0].median < 30, "the fully measured opening hour is the quietest single hour");
+assert.equal(tue.calm.from, 13, "but the longest calm run wins over a lone quiet hour");
+assert.equal(tue.calm.to, 15);
 assert.equal(tue.busy.hour, 18);
+assert.ok(tue.cells.length >= 17, "every open hour carries a median for the shape");
 const sat = open.weekdaySummary.find((r) => r.weekdayIndex === 5);
-assert.notEqual(sat.quiet.hour, 7, "Saturday opening hour (7 AM) is left out too");
+assert.equal(sat.calm.from, 13);
+assert.equal(sat.calm.to, 16, "13 to 16 is the longest run within the calm margin");
+
+// Hourly math: the counter starts at zero at opening, so the first reading counts,
+// and each update is spread back to the previous one.
+const morning = api.hourlyVisits([
+  { date: new Date("2026-09-01T09:07:00Z"), occupancy: 6 },
+  { date: new Date("2026-09-01T09:17:00Z"), occupancy: 6 },
+  { date: new Date("2026-09-01T09:27:00Z"), occupancy: 20 },
+  { date: new Date("2026-09-01T09:57:00Z"), occupancy: 20 },
+  { date: new Date("2026-09-01T10:07:00Z"), occupancy: 50 },
+]);
+const sum = morning.reduce((total, row) => total + row.visits, 0);
+assert.ok(Math.abs(sum - 50) < 1e-9, "a day's hourly visits add up to its last reading");
+const five = morning.find((row) => row.hour === 5).visits;
+assert.ok(Math.abs(five - (20 + 30 * (60 - 22) / 40)) < 1e-9, "the 6:02 update is spread back over 5:22 to 6:02");
 
 // Week heatmap: closed hours are blank, open hours carry medians, range is finite.
 assert.ok(Number.isFinite(open.weekMin) && Number.isFinite(open.weekMax) && open.weekMax > open.weekMin);
@@ -110,6 +132,7 @@ assert.equal(closed.pick, null);
 assert.equal(closed.planWeekday, 2);
 assert.ok(closed.dayparts.every((d) => !d.passed));
 assert.ok(closed.dayparts.some((d) => d.best && d.best.hour !== 5), "later parts of the day have their own best hour");
+assert.ok(closed.planStretches.length >= 1 && closed.planStretches.every((s) => s.to <= 22), "planned stretches skip the last hour");
 
 // After close, Tuesday 11:30 PM: status closed, tomorrow's weekday is planned.
 const lateNow = new Date("2026-09-02T03:30:00Z");

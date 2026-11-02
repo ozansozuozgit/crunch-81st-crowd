@@ -9,7 +9,17 @@ const HOURS = [[5 * 60, 23 * 60], [5 * 60, 23 * 60], [5 * 60, 23 * 60], [5 * 60,
 const partsFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: NEW_YORK, weekday: "short", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const ARCHIVE_CRON = "11 4 * * *";
-const WEATHER_URL = "https://api.open-meteo.com/v1/forecast?latitude=40.7829&longitude=-73.9654&daily=precipitation_sum&past_days=7&forecast_days=1&timezone=America%2FNew_York";
+const WEATHER_POINT = "latitude=40.7829&longitude=-73.9654&daily=precipitation_sum&timezone=America%2FNew_York";
+// Recent days come from the forecast model's past days; the archive (measured
+// reanalysis, a few days behind) then overwrites every day it has.
+const WEATHER_RECENT_URL = "https://api.open-meteo.com/v1/forecast?" + WEATHER_POINT + "&past_days=7&forecast_days=1";
+const WEATHER_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive?" + WEATHER_POINT;
+const WEATHER_ARCHIVE_DAYS = 95;
+const RAIN_MM = 1;
+const RAIN_DATES = 8;
+const COMPLETE_DAY_SLACK = 30;
+// One reading after close catches the counter's final update of the day.
+const AFTER_CLOSE_MINUTES = 10;
 
 function htmlDecode(value) {
   return value.replace(/&quot;/g, '"').replace(/&#34;/g, '"').replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
@@ -160,29 +170,55 @@ export function weekdayProfile(grouped) {
   }).sort((a, b) => a.typical_daily_visits - b.typical_daily_visits);
 }
 
+// Full-day check-in totals: the counter starts at zero at opening, so a day's
+// total is its last reading, but only when the day was read from opening to close.
+export function completeDayTotals(rows) {
+  const days = new Map();
+  for (const row of rows) {
+    const local = localParts(row.timestamp_utc);
+    const day = days.get(local.date) || { weekday: local.weekday, first: null, last: null };
+    const minute = local.hour * 60 + local.minute;
+    if (!day.first) day.first = { minute, occupancy: row.occupancy };
+    day.last = { minute, occupancy: row.occupancy };
+    days.set(local.date, day);
+  }
+  const totals = new Map();
+  for (const [date, day] of days) {
+    const [opens, closes] = HOURS[day.weekday];
+    if (day.first.minute - opens > COMPLETE_DAY_SLACK || closes - day.last.minute > COMPLETE_DAY_SLACK) continue;
+    totals.set(date, { weekday: day.weekday, total: day.last.occupancy });
+  }
+  return totals;
+}
+
+// Rainy vs dry days, each day measured against the median full day for its
+// weekday, so a rainy Sunday is not compared with a dry Monday.
 export function summarizeWeather(rows, weatherRows) {
   const precipitationByDate = new Map((weatherRows || []).filter((row) => row && typeof row.local_date === "string" && Number.isFinite(row.precipitation_mm)).map((row) => [row.local_date, row.precipitation_mm]));
-  const dayTotals = new Map();
-  for (const row of hourlyVisits(rows)) dayTotals.set(row.date, (dayTotals.get(row.date) || 0) + row.visits);
-  let rainy = 0;
-  let dry = 0;
-  const rainyMeans = [];
-  const dryMeans = [];
-  for (const [date, total] of dayTotals) {
+  const totals = completeDayTotals(rows);
+  const byWeekday = new Map();
+  for (const { weekday, total } of totals.values()) byWeekday.set(weekday, [...(byWeekday.get(weekday) || []), total]);
+  const normal = new Map([...byWeekday].map(([weekday, values]) => [weekday, median(values)]));
+  const rainy = [];
+  const dry = [];
+  for (const [date, { weekday, total }] of totals) {
     const precip = precipitationByDate.get(date);
-    if (precip === undefined) continue;
-    if (precip >= 1) { rainy += 1; rainyMeans.push(total); } else { dry += 1; dryMeans.push(total); }
+    if (precip === undefined || !normal.get(weekday)) continue;
+    (precip >= RAIN_MM ? rainy : dry).push(total / normal.get(weekday) - 1);
   }
-  const progress = { rainy_dates: rainy, dry_dates: dry, required_dates_per_group: 20, status: rainy || dry ? "collecting" : "unavailable" };
-  let correlations = { status: "insufficient_data" };
-  if (rainy >= 20 && dry >= 20 && rainyMeans.length >= 2 && dryMeans.length >= 2) {
-    const meanOf = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
-    const varianceOf = (values) => { const mean = meanOf(values); return values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1); };
-    const effect = meanOf(rainyMeans) - meanOf(dryMeans);
-    const standardError = Math.sqrt(varianceOf(rainyMeans) / rainy + varianceOf(dryMeans) / dry);
-    correlations = { status: "observed", effect, condition_n: rainy, comparison_n: dry, confidence_low: effect - 1.96 * standardError, confidence_high: effect + 1.96 * standardError };
-  }
-  return { progress, correlations };
+  const ready = rainy.length >= RAIN_DATES && dry.length >= RAIN_DATES;
+  const progress = { rainy_dates: rainy.length, dry_dates: dry.length, required_dates_per_group: RAIN_DATES, status: ready ? "eligible" : rainy.length || dry.length ? "collecting" : "unavailable" };
+  if (!ready) return { progress, rain: { status: "insufficient_data" } };
+  const meanOf = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
+  const varianceOf = (values) => { const mean = meanOf(values); return values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1); };
+  const effect = meanOf(rainy) - meanOf(dry);
+  const standardError = Math.sqrt(varianceOf(rainy) / rainy.length + varianceOf(dry) / dry.length);
+  const low = effect - 1.96 * standardError;
+  const high = effect + 1.96 * standardError;
+  return {
+    progress,
+    rain: { status: "observed", unit: "share_of_weekday_normal", rain_mm: RAIN_MM, effect, confidence_low: low, confidence_high: high, clear: low > 0 || high < 0, condition_n: rainy.length, comparison_n: dry.length },
+  };
 }
 
 export function buildInsights(rows, generatedAt = new Date().toISOString(), weatherRows = []) {
@@ -224,7 +260,8 @@ export function buildInsights(rows, generatedAt = new Date().toISOString(), weat
     recommendation_progress: { matching_dates: matchingDates, required_dates: QUIET_DATES, status: matchingDates >= QUIET_DATES ? "ready" : "collecting" },
     quiet_window_details: { status: ready ? "ready" : "insufficient_data", items: items.map(({ week_spread, ...item }) => item) },
     monthly_stability: { status: ready ? "ready" : "insufficient_data", items: items.map(({ slot, independent_weeks, week_spread }) => ({ slot, independent_weeks, week_spread })) },
-    correlations: weather.correlations,
+    correlations: { status: "superseded", by: "rain_comparison" },
+    rain_comparison: weather.rain,
     weather_progress: weather.progress,
     factor_context: { holiday_dates: holidayDates, non_holiday_dates: distinctDates.size - holidayDates, weather_progress: weather.progress, class_schedule_status: "unavailable" },
     class_schedule: { status: "unavailable" },
@@ -327,7 +364,7 @@ async function bootstrap(env) {
 async function collect(env, now = new Date()) {
   const local = localParts(now.toISOString());
   const [opens, closes] = HOURS[local.weekday];
-  if (local.hour * 60 + local.minute < opens || local.hour * 60 + local.minute >= closes) return { status: "closed" };
+  if (local.hour * 60 + local.minute < opens || local.hour * 60 + local.minute >= closes + AFTER_CLOSE_MINUTES) return { status: "closed" };
   await bootstrap(env);
   const response = await fetch(CRUNCH_URL, { headers: { "user-agent": "crunch-81st-cloudflare-collector/1.0" } });
   if (!response.ok) throw new Error("Crunch returned " + response.status);
@@ -338,17 +375,37 @@ async function collect(env, now = new Date()) {
   return { status: "recorded", timestamp, ...record };
 }
 
-async function recordWeather(env) {
-  const response = await fetch(WEATHER_URL, { headers: { "user-agent": "crunch-81st-cloudflare-collector/1.0" } });
-  if (!response.ok) throw new Error("Open-Meteo returned " + response.status);
-  const payload = await response.json();
+function weatherDays(payload) {
   const dates = payload?.daily?.time;
   const precipitation = payload?.daily?.precipitation_sum;
   if (!Array.isArray(dates) || !Array.isArray(precipitation) || dates.length !== precipitation.length || !dates.every((date) => /^\d{4}-\d\d-\d\d$/.test(date))) {
     throw new Error("invalid weather payload");
   }
-  await env.DB.batch(dates.map((date, index) => env.DB.prepare("INSERT OR IGNORE INTO daily_weather (local_date, precipitation_mm) VALUES (?, ?)").bind(date, precipitation[index])));
-  return setState(env, "last_weather", new Date().toISOString().replace(/\.\d{3}Z$/, "Z"));
+  return dates.map((date, index) => [date, precipitation[index]]).filter(([, mm]) => Number.isFinite(mm));
+}
+
+function localDateOffset(localDate, days) {
+  const date = new Date(localDate + "T12:00:00Z");
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+// Stores finished days only (never today's forecast) and overwrites earlier
+// values, so each day ends up with the archive's measured precipitation.
+export async function recordWeather(env, now = new Date()) {
+  const today = localParts(now.toISOString()).date;
+  const fetchJson = async (url) => {
+    const response = await fetch(url, { headers: { "user-agent": "crunch-81st-cloudflare-collector/1.0" } });
+    if (!response.ok) throw new Error("Open-Meteo returned " + response.status);
+    return response.json();
+  };
+  const recent = weatherDays(await fetchJson(WEATHER_RECENT_URL));
+  const archive = weatherDays(await fetchJson(WEATHER_ARCHIVE_URL + "&start_date=" + localDateOffset(today, -WEATHER_ARCHIVE_DAYS) + "&end_date=" + localDateOffset(today, -1)));
+  const days = new Map([...recent, ...archive].filter(([date]) => date < today));
+  const upsert = "INSERT INTO daily_weather (local_date, precipitation_mm) VALUES (?, ?) ON CONFLICT(local_date) DO UPDATE SET precipitation_mm = excluded.precipitation_mm";
+  if (days.size) await env.DB.batch([...days].map(([date, mm]) => env.DB.prepare(upsert).bind(date, mm)));
+  await setState(env, "last_weather", now.toISOString().replace(/\.\d{3}Z$/, "Z") + " " + days.size + " days");
+  return { status: "recorded", days: days.size };
 }
 
 export default {

@@ -21,7 +21,7 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
             'id="chart-heading">Today, hour by hour',
             'id="parts-heading">Best time in each part of the day',
             'id="week-heading">A typical week',
-            'id="days-heading">Quietest and busiest hour, by weekday',
+            'id="days-heading">Each day’s shape',
             'id="fine-1"',
             'id="fine-2"',
         ):
@@ -59,9 +59,10 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
     def test_copy_is_evidence_bound_and_non_causal(self):
         for contract in (
             "Based on ${plural(",
-            "opening hour left out",
-            "Quietest ${when} after the opening hour",
-            "An hour is only called reliably quiet after it has been quiet on 4 separate days.",
+            "Calmest ${when}: ",
+            "The last hour before closing is never suggested",
+            "Rain makes no clear difference",
+            "of a normal day of the same weekday",
             "Observed association, not proof",
             "Context, not causes.",
             "not people in the room",
@@ -74,7 +75,7 @@ class DashboardQuietWorkoutContracts(unittest.TestCase):
             "quiet-workout planner",
             "latest\nrecorded state",
             "today against the typical day for its weekday",
-            "week-to-week stability",
+            "calmest\nstretch of hours left today",
             "progress instead of a recommendation",
             "independent local dates",
             "historical range",
