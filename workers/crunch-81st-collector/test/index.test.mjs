@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { archiveReadings, buildInsights, hourlyVisits, parseClubRecord, parseSlotKey, summarizeWeather, toCsv, todayPlan, weekdayProfile } from "../src/index.js";
+import { archiveReadings, buildInsights, completeDayTotals, hourlyVisits, parseClubRecord, parseSlotKey, recordWeather, summarizeWeather, toCsv, todayPlan, weekdayProfile } from "../src/index.js";
 
 function fakeDb(rows) {
   const state = {};
@@ -193,38 +193,116 @@ test("parseSlotKey validates the hourly slot contract", () => {
   assert.equal(parseSlotKey("bad"), null);
 });
 
-test("weather progress counts only reading dates with recorded weather", () => {
-  const rows = [...counterDay("2026-08-03", [10, 40]), ...counterDay("2026-08-04", [20, 60]), ...counterDay("2026-08-05", [15, 50])];
+// A day read from opening to close (EDT dates): 7 minutes after open, then
+// 3 minutes before close, with the counter at the day's total.
+const OPEN_MINUTES = [[300, 1380], [300, 1380], [300, 1380], [300, 1380], [300, 1320], [420, 1260], [480, 1260]];
+function wholeDay(date, total) {
+  const weekday = (new Date(date + "T12:00:00Z").getUTCDay() + 6) % 7;
+  const [opens, closes] = OPEN_MINUTES[weekday];
+  const at = (minute) => new Date(Date.parse(date + "T00:00:00-04:00") + minute * 60000).toISOString().replace(/\.\d{3}Z$/, "Z");
+  return [{ timestamp_utc: at(opens + 7), occupancy: 5, status: "light" }, { timestamp_utc: at(closes - 3), occupancy: total, status: "active" }];
+}
+const dayAfter = (date, days) => new Date(Date.parse(date + "T12:00:00Z") + days * 86400000).toISOString().slice(0, 10);
+
+test("complete day totals keep only days read from opening to close", () => {
+  const rows = [...wholeDay("2026-08-03", 900), ...counterDay("2026-08-04", [10, 40])];
+  const totals = completeDayTotals(rows);
+  assert.deepEqual([...totals.keys()], ["2026-08-03"]);
+  assert.deepEqual(totals.get("2026-08-03"), { weekday: 0, total: 900 });
+});
+
+test("weather progress counts only complete days with recorded weather", () => {
+  const rows = [...wholeDay("2026-08-03", 900), ...wholeDay("2026-08-04", 950), ...wholeDay("2026-08-05", 880), ...counterDay("2026-08-06", [10, 40])];
   const weatherRows = [
     { local_date: "2026-08-03", precipitation_mm: 0 },
     { local_date: "2026-08-04", precipitation_mm: 4.2 },
     { local_date: "2026-08-05", precipitation_mm: null },
+    { local_date: "2026-08-06", precipitation_mm: 9 },
   ];
-  const { progress, correlations } = summarizeWeather(rows, weatherRows);
+  const { progress, rain } = summarizeWeather(rows, weatherRows);
   assert.equal(progress.status, "collecting");
   assert.equal(progress.rainy_dates, 1);
   assert.equal(progress.dry_dates, 1);
-  assert.equal(correlations.status, "insufficient_data");
+  assert.equal(progress.required_dates_per_group, 8);
+  assert.equal(rain.status, "insufficient_data");
 });
 
-test("weather correlation unlocks at twenty independent dates per group", () => {
-  const rainyDates = Array.from({ length: 20 }, (_, index) => `2026-05-${String(index + 1).padStart(2, "0")}`);
-  const dryDates = Array.from({ length: 20 }, (_, index) => `2026-06-${String(index + 1).padStart(2, "0")}`);
-  const rows = [...rainyDates, ...dryDates].flatMap((date, index) => counterDay(date, date.startsWith("2026-05") ? (index % 2 ? [60, 170] : [50, 150]) : index % 2 ? [30, 90] : [20, 70]));
-  const weatherRows = [...rainyDates.map((local_date) => ({ local_date, precipitation_mm: 5 })), ...dryDates.map((local_date) => ({ local_date, precipitation_mm: 0 }))];
-  const { correlations } = summarizeWeather(rows, weatherRows);
-  assert.equal(correlations.status, "observed");
-  assert.equal(correlations.condition_n, 20);
-  assert.equal(correlations.comparison_n, 20);
-  assert.ok(Math.abs(correlations.effect - 50) < 0.001); // rainy days average ~105 visits vs ~55 on dry days
-  assert.ok(correlations.confidence_low < correlations.effect && correlations.confidence_high > correlations.effect);
+test("rain comparison measures each day against its own weekday", () => {
+  // Rainy days fall on quiet Sundays, dry days on busy Mondays: raw totals differ
+  // by half, but against their own weekday neither group is busier.
+  const rows = [];
+  const weatherRows = [];
+  for (let week = 0; week < 10; week += 1) {
+    const monday = dayAfter("2026-06-01", week * 7);
+    const sunday = dayAfter(monday, 6);
+    const wobble = week % 2 ? 1.1 : 0.9;
+    rows.push(...wholeDay(monday, Math.round(1000 * wobble)), ...wholeDay(sunday, Math.round(500 * wobble)));
+    weatherRows.push({ local_date: monday, precipitation_mm: 0 }, { local_date: sunday, precipitation_mm: 6 });
+  }
+  const { progress, rain } = summarizeWeather(rows, weatherRows);
+  assert.equal(progress.status, "eligible");
+  assert.equal(rain.status, "observed");
+  assert.equal(rain.unit, "share_of_weekday_normal");
+  assert.equal(rain.condition_n, 10);
+  assert.equal(rain.comparison_n, 10);
+  assert.ok(Math.abs(rain.effect) < 0.001, "no difference once weekday is accounted for");
+  assert.equal(rain.clear, false);
 });
 
-test("buildInsights exposes real weather progress instead of a hardcoded unavailable state", () => {
-  const rows = [...counterDay("2026-08-03", [10, 40]), ...counterDay("2026-08-04", [20, 60])];
+test("rain comparison reports a clear difference with its range", () => {
+  const rows = [];
+  const weatherRows = [];
+  for (let week = 0; week < 10; week += 1) {
+    for (let day = 0; day < 2; day += 1) {
+      const date = dayAfter("2026-06-01", week * 7 + day);
+      const rainy = (week + day) % 2 === 0;
+      rows.push(...wholeDay(date, Math.round((rainy ? 1200 : 1000) * (week % 3 ? 1.02 : 0.98))));
+      weatherRows.push({ local_date: date, precipitation_mm: rainy ? 3 : 0 });
+    }
+  }
+  const { rain } = summarizeWeather(rows, weatherRows);
+  assert.equal(rain.status, "observed");
+  assert.ok(rain.effect > 0.15 && rain.effect < 0.25, "rainy days run about 20% busier");
+  assert.ok(rain.confidence_low > 0 && rain.confidence_high > rain.effect);
+  assert.equal(rain.clear, true);
+});
+
+test("buildInsights exposes the rain comparison and retires the raw correlation", () => {
+  const rows = [...wholeDay("2026-08-03", 900), ...wholeDay("2026-08-04", 950)];
   const insights = buildInsights(rows, "2026-08-24T12:00:00Z", [{ local_date: "2026-08-03", precipitation_mm: 3 }, { local_date: "2026-08-04", precipitation_mm: 0 }]);
   assert.equal(insights.weather_progress.status, "collecting");
   assert.equal(insights.factor_context.weather_progress.rainy_dates, 1);
+  assert.equal(insights.rain_comparison.status, "insufficient_data");
+  assert.equal(insights.correlations.status, "superseded");
+});
+
+test("weather keeps finished days only and lets the archive overwrite the forecast", async () => {
+  const writes = [];
+  const state = {};
+  const env = {
+    DB: {
+      prepare(sql) {
+        return { bind: (...args) => ({ sql, args, run: async () => { if (sql.includes("collector_state")) state[args[0]] = args[1]; } }) };
+      },
+      batch: async (statements) => { writes.push(...statements.map((statement) => statement.args)); },
+    },
+  };
+  const fetchImpl = fakeFetch((url) => {
+    if (url.includes("archive-api")) {
+      assert.match(url, /start_date=2026-07-29&end_date=2026-10-31/);
+      return new Response(JSON.stringify({ daily: { time: ["2026-10-29", "2026-10-30", "2026-10-31"], precipitation_sum: [2.5, 0, null] } }));
+    }
+    return new Response(JSON.stringify({ daily: { time: ["2026-10-30", "2026-10-31", "2026-11-01"], precipitation_sum: [7, 1.2, 9] } }));
+  });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = fetchImpl;
+  try {
+    assert.deepEqual(await recordWeather(env, new Date("2026-11-02T04:11:00Z")), { status: "recorded", days: 3 });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.deepEqual(writes.sort(), [["2026-10-29", 2.5], ["2026-10-30", 0], ["2026-10-31", 1.2]]);
+  assert.match(state.last_weather, /3 days/);
 });
 
 test("emits the public CSV contract", () => {
